@@ -410,8 +410,55 @@ class DashboardNode(Node):
         ).expanduser()
         gemini_usage = self.load_gemini_usage()
         prefix = f'/{self.robot_namespace}' if self.robot_namespace else ''
+        # Clearpath's BT joystick watchdog normally owns a very high-priority
+        # twist_mux lock.  A DualSense can remain Bluetooth-connected while
+        # asleep, which makes that watchdog report 0% quality and silently
+        # block every Nav2 command.  Dashboard-owned autonomous actions may
+        # temporarily lower only this lock; the physical E-stop and safety
+        # locks remain at their normal priorities (255 and 254).
+        self.autonomous_navigation_bypass_bt_quality = bool(
+            self.declare_parameter(
+                'autonomous_navigation_bypass_bt_quality', True
+            ).value
+        )
+        self.bt_quality_normal_priority = max(
+            0,
+            min(
+                255,
+                int(
+                    self.declare_parameter(
+                        'bt_quality_normal_priority', 253
+                    ).value
+                    or 253
+                ),
+            ),
+        )
+        self.bt_quality_autonomous_priority = max(
+            0,
+            min(
+                255,
+                int(
+                    self.declare_parameter(
+                        'bt_quality_autonomous_priority', 0
+                    ).value
+                    or 0
+                ),
+            ),
+        )
+        self.twist_mux_node_name = f'{prefix}/twist_mux' or '/twist_mux'
         self.lock = threading.Lock()
         self.process_lock = threading.Lock()
+        self.autonomous_navigation_lock = threading.Lock()
+        self.autonomous_navigation_active = False
+        self.autonomous_navigation_priority = None
+        self.autonomous_navigation_last_error = None
+        self.autonomous_navigation_last_change_at = 0.0
+        self.autonomous_navigation_restore_pending = bool(
+            self.autonomous_navigation_bypass_bt_quality
+        )
+        self.autonomous_navigation_restore_attempts = 0
+        self.autonomous_navigation_restore_max_attempts = 15
+        self.autonomous_navigation_restore_next_at = 0.0
         self.wake_training_lock = threading.Lock()
         self.audio_monitor_lock = threading.Lock()
         self.audio_monitor_clients = set()
@@ -1005,6 +1052,10 @@ class DashboardNode(Node):
         self.create_timer(2.0, self.auto_start_navigation_tick)
         self.create_timer(2.0, self.auto_localization_tick)
         self.create_timer(2.0, self.localization_watchdog_tick)
+        # If the Dashboard was killed while autonomous mode was active, the
+        # in-memory twist_mux parameter can outlive it.  Retry a fail-closed
+        # restore for a short startup window until twist_mux is discoverable.
+        self.create_timer(2.0, self.autonomous_navigation_lock_tick)
 
     @staticmethod
     def finite_value(value):
@@ -4461,6 +4512,118 @@ class DashboardNode(Node):
         ros2 = shutil.which('ros2') or '/opt/ros/jazzy/bin/ros2'
         return [ros2, *args]
 
+    def set_autonomous_navigation_mode(self, active, force=False):
+        """Toggle only Clearpath's Bluetooth-quality twist_mux lock.
+
+        The Clearpath BT watchdog is intentionally fail-closed for manual
+        joystick operation.  It is not a reason to block an explicitly
+        requested Nav2 goal when the physical E-stop and safety-stop locks
+        are still present.  We change the live twist_mux parameter through
+        the ROS 2 CLI so this works from both HTTP threads and ROS callbacks;
+        waiting on an rclpy parameter future from a single-threaded callback
+        would otherwise deadlock the Dashboard executor.
+
+        A failed parameter update never sends a new autonomous goal.  Every
+        terminal/cancel/shutdown path requests the normal priority again, and
+        the retry timer handles a twist_mux that is still starting up.
+        """
+        active = bool(active)
+        if not self.autonomous_navigation_bypass_bt_quality:
+            with self.lock:
+                self.autonomous_navigation_active = False
+                self.autonomous_navigation_priority = self.bt_quality_normal_priority
+                self.autonomous_navigation_last_error = None
+            return True
+
+        priority = (
+            self.bt_quality_autonomous_priority
+            if active
+            else self.bt_quality_normal_priority
+        )
+        with self.autonomous_navigation_lock:
+            with self.lock:
+                current_active = self.autonomous_navigation_active
+                current_priority = self.autonomous_navigation_priority
+                current_error = self.autonomous_navigation_last_error
+            if (
+                not force
+                and current_active == active
+                and current_priority == priority
+                and current_error is None
+            ):
+                return True
+
+            try:
+                result = subprocess.run(
+                    self.ros2_command(
+                        'param',
+                        'set',
+                        self.twist_mux_node_name,
+                        'locks.bt_quality.priority',
+                        str(priority),
+                    ),
+                    capture_output=True,
+                    text=True,
+                    timeout=6,
+                    check=False,
+                    env=os.environ.copy(),
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                detail = str(exc)
+                result = None
+            else:
+                detail = (
+                    (result.stderr or result.stdout or '').strip().splitlines()
+                    or [f'exit {result.returncode}']
+                )[0][:240]
+
+            success = result is not None and result.returncode == 0
+            with self.lock:
+                # The logical navigation state follows the requested action;
+                # priority=None makes an unsuccessful restore visible rather
+                # than pretending that the live twist_mux is known-safe.
+                self.autonomous_navigation_active = active if success else False
+                self.autonomous_navigation_priority = priority if success else None
+                self.autonomous_navigation_last_error = None if success else detail
+                self.autonomous_navigation_last_change_at = time.time()
+                self.autonomous_navigation_restore_pending = not success
+                if success:
+                    self.autonomous_navigation_restore_attempts = 0
+                    self.autonomous_navigation_restore_next_at = 0.0
+
+            if success:
+                self.get_logger().info(
+                    'twist_mux BT-quality lock priority set to '
+                    f'{priority} (autonomous={active})'
+                )
+            else:
+                self.get_logger().warning(
+                    'Could not set twist_mux BT-quality lock priority '
+                    f'to {priority}: {detail}'
+                )
+            return success
+
+    def autonomous_navigation_lock_tick(self):
+        """Retry the fail-closed BT-quality priority after startup/errors."""
+        with self.lock:
+            pending = self.autonomous_navigation_restore_pending
+            active = self.autonomous_navigation_active
+            attempts = self.autonomous_navigation_restore_attempts
+            next_at = self.autonomous_navigation_restore_next_at
+        if not pending or active or attempts >= self.autonomous_navigation_restore_max_attempts:
+            return
+        now = time.monotonic()
+        if next_at and now < next_at:
+            return
+        with self.lock:
+            self.autonomous_navigation_restore_attempts += 1
+            attempt = self.autonomous_navigation_restore_attempts
+            self.autonomous_navigation_restore_next_at = now + 2.0
+        if self.set_autonomous_navigation_mode(False, force=True):
+            self.get_logger().debug(
+                f'Restored normal BT-quality lock priority on attempt {attempt}'
+            )
+
     def start_process(self, attribute, args):
         with self.process_lock:
             process = getattr(self, attribute)
@@ -5506,6 +5669,12 @@ class DashboardNode(Node):
                 }
             raise RuntimeError('Το AMCL global localization service δεν είναι διαθέσιμο')
 
+        if allow_motion and not self.set_autonomous_navigation_mode(True):
+            raise RuntimeError(
+                'Δεν ενεργοποιήθηκε το autonomous mode του Clearpath· '
+                'δεν ξεκινά η περιστροφή localization για λόγους ασφάλειας.'
+            )
+
         now = time.monotonic()
         with self.lock:
             # Drop every old pose before resetting AMCL.  Otherwise the last
@@ -5597,6 +5766,7 @@ class DashboardNode(Node):
     def finish_global_localization(self, success, error=''):
         with self.lock:
             active = self.localization_search_active
+            autonomous_mode_was_active = self.autonomous_navigation_active
             method = self.localization_method or 'amcl_global'
             self.localization_search_active = False
             self.localization_scan_match_active = False
@@ -5657,6 +5827,8 @@ class DashboardNode(Node):
             )
         if active or success:
             self.drive(0.0, 0.0)
+        if autonomous_mode_was_active:
+            self.set_autonomous_navigation_mode(False)
 
     def localization_tick(self):
         with self.lock:
@@ -5828,6 +6000,7 @@ class DashboardNode(Node):
                 self.navigation_status = 'failed'
                 self.navigation_feedback = {'error': str(exc)}
             self.clear_navigation_path()
+            self.set_autonomous_navigation_mode(False)
             return
 
         if not goal_handle.accepted:
@@ -5836,6 +6009,7 @@ class DashboardNode(Node):
                 self.navigation_status = 'rejected'
                 self.navigation_feedback = {'error': 'Ο στόχος απορρίφθηκε από το Nav2'}
             self.clear_navigation_path()
+            self.set_autonomous_navigation_mode(False)
             return
 
         with self.lock:
@@ -5892,6 +6066,10 @@ class DashboardNode(Node):
             patrol_active = self.patrol_active
             if patrol_active and navigation_status == 'succeeded':
                 self.patrol_completed += 1
+        # A terminal Nav2 result must return twist_mux to the fail-closed
+        # joystick-quality priority before another goal or manual teleop can
+        # begin.  Patrol will explicitly re-enable the mode for its next leg.
+        self.set_autonomous_navigation_mode(False)
         if patrol_active and navigation_status == 'succeeded':
             self.start_next_patrol_goal()
         elif patrol_active:
@@ -6016,6 +6194,7 @@ class DashboardNode(Node):
                 self.drive_heading_result_future = None
                 self.drive_heading_status = 'failed'
                 self.drive_heading_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             self.publish_voice_reply(
                 f'Η κίνηση απέτυχε: {exc}.',
                 ok=False,
@@ -6030,6 +6209,7 @@ class DashboardNode(Node):
                 self.drive_heading_feedback = {
                     'error': 'Η κίνηση απορρίφθηκε από το Nav2'
                 }
+            self.set_autonomous_navigation_mode(False)
             self.publish_voice_reply(
                 'Η κίνηση απορρίφθηκε από το Nav2.',
                 ok=False,
@@ -6086,6 +6266,7 @@ class DashboardNode(Node):
             self.drive_heading_status = drive_status
             if not self.drive_heading_feedback:
                 self.drive_heading_feedback = {'error': text} if not ok else None
+        self.set_autonomous_navigation_mode(False)
         self.publish_voice_reply(text, ok=ok, action='move_distance')
 
     def start_drive_heading(self, distance_m):
@@ -6144,6 +6325,16 @@ class DashboardNode(Node):
             self.drive_heading_status = 'sending'
             self.drive_heading_feedback = None
             self.drive_heading_distance_m = round(distance_m, 3)
+        if not self.set_autonomous_navigation_mode(True):
+            with self.lock:
+                self.drive_heading_status = 'failed'
+                self.drive_heading_feedback = {
+                    'error': 'Το autonomous mode δεν ενεργοποιήθηκε'
+                }
+            raise RuntimeError(
+                'Δεν ενεργοποιήθηκε το autonomous mode του Clearpath· '
+                'δεν στάλθηκε η κίνηση για λόγους ασφάλειας.'
+            )
         try:
             future = self.drive_heading_client.send_goal_async(
                 goal,
@@ -6154,6 +6345,7 @@ class DashboardNode(Node):
             with self.lock:
                 self.drive_heading_status = 'failed'
                 self.drive_heading_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             raise RuntimeError(f'Δεν στάλθηκε η κίνηση στο Nav2: {exc}') from exc
         return True
 
@@ -6164,6 +6356,8 @@ class DashboardNode(Node):
             if active:
                 self.drive_heading_status = 'canceling'
         if goal_handle is None:
+            if active:
+                self.set_autonomous_navigation_mode(False)
             return active
         try:
             goal_handle.cancel_goal_async()
@@ -6171,7 +6365,9 @@ class DashboardNode(Node):
             with self.lock:
                 self.drive_heading_status = 'failed'
                 self.drive_heading_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             return False
+        self.set_autonomous_navigation_mode(False)
         return True
 
     def spin_feedback_cb(self, feedback_message):
@@ -6192,6 +6388,7 @@ class DashboardNode(Node):
                 self.spin_result_future = None
                 self.spin_status = 'failed'
                 self.spin_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             self.publish_voice_reply(
                 f'Η στροφή απέτυχε: {exc}.', ok=False, action='rotate'
             )
@@ -6202,6 +6399,7 @@ class DashboardNode(Node):
                 self.spin_result_future = None
                 self.spin_status = 'rejected'
                 self.spin_feedback = {'error': 'Η στροφή απορρίφθηκε από το Nav2'}
+            self.set_autonomous_navigation_mode(False)
             self.publish_voice_reply(
                 'Η στροφή απορρίφθηκε από το Nav2.', ok=False, action='rotate'
             )
@@ -6247,6 +6445,7 @@ class DashboardNode(Node):
             self.spin_goal_handle = None
             self.spin_result_future = None
             self.spin_status = spin_status
+        self.set_autonomous_navigation_mode(False)
         self.publish_voice_reply(text, ok=ok, action='rotate')
 
     def start_spin(self, degrees=360.0):
@@ -6297,6 +6496,16 @@ class DashboardNode(Node):
             self.spin_status = 'sending'
             self.spin_feedback = None
             self.spin_degrees = round(degrees, 1)
+        if not self.set_autonomous_navigation_mode(True):
+            with self.lock:
+                self.spin_status = 'failed'
+                self.spin_feedback = {
+                    'error': 'Το autonomous mode δεν ενεργοποιήθηκε'
+                }
+            raise RuntimeError(
+                'Δεν ενεργοποιήθηκε το autonomous mode του Clearpath· '
+                'δεν στάλθηκε η στροφή για λόγους ασφάλειας.'
+            )
         try:
             future = self.spin_client.send_goal_async(
                 goal,
@@ -6307,6 +6516,7 @@ class DashboardNode(Node):
             with self.lock:
                 self.spin_status = 'failed'
                 self.spin_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             raise RuntimeError(f'Δεν στάλθηκε η στροφή στο Nav2: {exc}') from exc
         return True
 
@@ -6317,6 +6527,8 @@ class DashboardNode(Node):
             if active:
                 self.spin_status = 'canceling'
         if goal_handle is None:
+            if active:
+                self.set_autonomous_navigation_mode(False)
             return active
         try:
             goal_handle.cancel_goal_async()
@@ -6324,7 +6536,9 @@ class DashboardNode(Node):
             with self.lock:
                 self.spin_status = 'failed'
                 self.spin_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             return False
+        self.set_autonomous_navigation_mode(False)
         return True
 
     def clear_navigation_path(self):
@@ -6500,7 +6714,11 @@ class DashboardNode(Node):
                 'Περίμενε να ολοκληρωθεί το αυτόματο Global Localization'
             )
         with self.lock:
-            if self.navigation_goal_handle is not None:
+            if self.navigation_goal_handle is not None or self.navigation_status in (
+                'sending',
+                'navigating',
+                'canceling',
+            ):
                 raise RuntimeError('Υπάρχει ενεργός στόχος· ακύρωσέ τον πρώτα')
             if self.drive_heading_goal_handle is not None or self.drive_heading_status in (
                 'sending',
@@ -6534,6 +6752,21 @@ class DashboardNode(Node):
             }
             self.navigation_feedback = None
             self.navigation_status = 'sending'
+        if not self.set_autonomous_navigation_mode(True):
+            with self.lock:
+                self.navigation_status = 'failed'
+                self.navigation_goal = None
+                self.navigation_feedback = {
+                    'error': (
+                        'Το autonomous mode δεν ενεργοποιήθηκε· '
+                        'δεν στάλθηκε εντολή κίνησης'
+                    )
+                }
+            self.clear_navigation_path()
+            raise RuntimeError(
+                'Δεν ενεργοποιήθηκε το autonomous mode του Clearpath· '
+                'δεν στάλθηκε ο στόχος για λόγους ασφάλειας.'
+            )
         try:
             future = self.navigation_client.send_goal_async(
                 goal,
@@ -6544,6 +6777,9 @@ class DashboardNode(Node):
             with self.lock:
                 self.navigation_status = 'failed'
                 self.navigation_feedback = {'error': str(exc)}
+                self.navigation_goal = None
+            self.clear_navigation_path()
+            self.set_autonomous_navigation_mode(False)
             raise RuntimeError(f'Δεν στάλθηκε ο στόχος στο Nav2: {exc}') from exc
         self.request_navigation_path(x, y)
         return True
@@ -6552,10 +6788,13 @@ class DashboardNode(Node):
         self.cancel_patrol()
         with self.lock:
             goal_handle = self.navigation_goal_handle
+            autonomous_mode_was_active = self.autonomous_navigation_active
             if goal_handle is not None:
                 self.navigation_status = 'canceling'
         self.clear_navigation_path()
         if goal_handle is None:
+            if autonomous_mode_was_active:
+                self.set_autonomous_navigation_mode(False)
             return False
         try:
             goal_handle.cancel_goal_async()
@@ -6563,7 +6802,9 @@ class DashboardNode(Node):
             with self.lock:
                 self.navigation_status = 'failed'
                 self.navigation_feedback = {'error': str(exc)}
+            self.set_autonomous_navigation_mode(False)
             return False
+        self.set_autonomous_navigation_mode(False)
         return True
 
     def stop_navigation(self):
@@ -6572,6 +6813,7 @@ class DashboardNode(Node):
         self.cancel_spin()
         self.cancel_navigation()
         stopped = self.stop_process('navigation_process')
+        self.set_autonomous_navigation_mode(False)
         with self.lock:
             self.localization_search_active = False
             self.localization_scan_match_active = False
@@ -6619,6 +6861,7 @@ class DashboardNode(Node):
         action_ready = self.navigation_client.server_is_ready()
         spin_action_ready = self.spin_client.server_is_ready()
         drive_heading_action_ready = self.drive_heading_client.server_is_ready()
+        restore_after_snapshot = False
         with self.lock:
             if not running and self.navigation_status in (
                 'starting',
@@ -6628,6 +6871,7 @@ class DashboardNode(Node):
                 'canceling',
             ):
                 self.navigation_status = 'idle'
+                restore_after_snapshot = True
             status = self.navigation_status
             goal = dict(self.navigation_goal) if self.navigation_goal else None
             feedback = (
@@ -6694,6 +6938,11 @@ class DashboardNode(Node):
             )
             patrol_total = self.patrol_total
             patrol_completed = self.patrol_completed
+            autonomous_navigation_active = self.autonomous_navigation_active
+            autonomous_navigation_priority = self.autonomous_navigation_priority
+            autonomous_navigation_last_error = self.autonomous_navigation_last_error
+        if restore_after_snapshot:
+            self.set_autonomous_navigation_mode(False)
         if running and action_ready and status == 'starting':
             status = 'ready'
             with self.lock:
@@ -6728,6 +6977,17 @@ class DashboardNode(Node):
             'path': path,
             'path_status': path_status,
             'path_error': path_error,
+            'autonomous_mode': {
+                'active': bool(autonomous_navigation_active),
+                'bt_quality_bypassed': bool(
+                    autonomous_navigation_active
+                    and autonomous_navigation_priority
+                    == self.bt_quality_autonomous_priority
+                ),
+                'bt_quality_priority': autonomous_navigation_priority,
+                'last_error': autonomous_navigation_last_error,
+                'safety_locks_retained': True,
+            },
             'spin': {
                 'action_ready': bool(spin_action_ready),
                 'status': spin_status,
@@ -7112,6 +7372,9 @@ class DashboardNode(Node):
         self.stop_process('camera_process')
         self.stop_rviz()
         self.stop_process('map_save_process')
+        # Keep the physical Clearpath default if the Dashboard is stopped by
+        # systemd, Ctrl-C, or a ROS shutdown before a Nav2 result arrives.
+        self.set_autonomous_navigation_mode(False, force=True)
 
 
 def serve(node, port):
