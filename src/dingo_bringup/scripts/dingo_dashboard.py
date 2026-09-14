@@ -411,11 +411,11 @@ class DashboardNode(Node):
         gemini_usage = self.load_gemini_usage()
         prefix = f'/{self.robot_namespace}' if self.robot_namespace else ''
         # Clearpath's BT joystick watchdog normally owns a very high-priority
-        # twist_mux lock.  A DualSense can remain Bluetooth-connected while
+        # twist_mux lock. A DualSense can remain Bluetooth-connected while
         # asleep, which makes that watchdog report 0% quality and silently
-        # block every Nav2 command.  Dashboard-owned autonomous actions may
-        # temporarily lower only this lock; the physical E-stop and safety
-        # locks remain at their normal priorities (255 and 254).
+        # block every Nav2 command. Dashboard-owned autonomous actions use a
+        # separate fail-closed gate; the physical E-stop and safety locks
+        # remain at their normal priorities (255 and 254).
         self.autonomous_navigation_bypass_bt_quality = bool(
             self.declare_parameter(
                 'autonomous_navigation_bypass_bt_quality', True
@@ -433,24 +433,21 @@ class DashboardNode(Node):
                 ),
             ),
         )
-        self.bt_quality_autonomous_priority = max(
-            0,
-            min(
-                255,
-                int(
-                    self.declare_parameter(
-                        'bt_quality_autonomous_priority', 0
-                    ).value
-                    or 0
-                ),
-            ),
+        gate_suffix = str(
+            self.declare_parameter(
+                'bt_quality_gate_topic', 'joy_teleop/bt_quality_stop_gate'
+            ).value
+            or 'joy_teleop/bt_quality_stop_gate'
+        ).strip('/')
+        self.bt_quality_gate_topic = (
+            f'{prefix}/{gate_suffix}' if prefix else f'/{gate_suffix}'
         )
-        self.twist_mux_node_name = f'{prefix}/twist_mux' or '/twist_mux'
         self.lock = threading.Lock()
         self.process_lock = threading.Lock()
         self.autonomous_navigation_lock = threading.Lock()
         self.autonomous_navigation_active = False
-        self.autonomous_navigation_priority = None
+        self.autonomous_navigation_gate_locked = True
+        self.autonomous_navigation_priority = self.bt_quality_normal_priority
         self.autonomous_navigation_last_error = None
         self.autonomous_navigation_last_change_at = 0.0
         self.autonomous_navigation_restore_pending = bool(
@@ -459,6 +456,11 @@ class DashboardNode(Node):
         self.autonomous_navigation_restore_attempts = 0
         self.autonomous_navigation_restore_max_attempts = 15
         self.autonomous_navigation_restore_next_at = 0.0
+        self.bt_quality_gate_pub = self.create_publisher(
+            Bool,
+            self.bt_quality_gate_topic,
+            10,
+        )
         self.wake_training_lock = threading.Lock()
         self.audio_monitor_lock = threading.Lock()
         self.audio_monitor_clients = set()
@@ -1052,10 +1054,13 @@ class DashboardNode(Node):
         self.create_timer(2.0, self.auto_start_navigation_tick)
         self.create_timer(2.0, self.auto_localization_tick)
         self.create_timer(2.0, self.localization_watchdog_tick)
+        self.create_timer(0.1, self.publish_bt_quality_gate)
         # If the Dashboard was killed while autonomous mode was active, the
         # in-memory twist_mux parameter can outlive it.  Retry a fail-closed
         # restore for a short startup window until twist_mux is discoverable.
         self.create_timer(2.0, self.autonomous_navigation_lock_tick)
+        # Publish the fail-closed state before the first timer callback.
+        self.publish_bt_quality_gate()
 
     @staticmethod
     def finite_value(value):
@@ -4513,77 +4518,62 @@ class DashboardNode(Node):
         return [ros2, *args]
 
     def set_autonomous_navigation_mode(self, active, force=False):
-        """Toggle only Clearpath's Bluetooth-quality twist_mux lock.
+        """Open or close the fail-closed Dashboard BT-quality gate.
 
-        The Clearpath BT watchdog is intentionally fail-closed for manual
-        joystick operation.  It is not a reason to block an explicitly
-        requested Nav2 goal when the physical E-stop and safety-stop locks
-        are still present.  We change the live twist_mux parameter through
-        the ROS 2 CLI so this works from both HTTP threads and ROS callbacks;
-        waiting on an rclpy parameter future from a single-threaded callback
-        would otherwise deadlock the Dashboard executor.
-
-        A failed parameter update never sends a new autonomous goal.  Every
-        terminal/cancel/shutdown path requests the normal priority again, and
-        the retry timer handles a twist_mux that is still starting up.
+        Clearpath's ``twist_mux`` keeps its lock priorities internally and
+        does not apply a runtime priority parameter update.  The platform
+        config therefore listens to ``bt_quality_stop_gate`` instead of the
+        raw watchdog topic.  The Dashboard publishes ``True`` while idle and
+        at 10 Hz, and only publishes ``False`` for an explicitly requested
+        autonomous action.  The mux's 0.5 s timeout locks it again if this
+        process disappears.  E-stop and safety-stop locks are untouched.
         """
         active = bool(active)
         if not self.autonomous_navigation_bypass_bt_quality:
             with self.lock:
                 self.autonomous_navigation_active = False
+                self.autonomous_navigation_gate_locked = True
                 self.autonomous_navigation_priority = self.bt_quality_normal_priority
                 self.autonomous_navigation_last_error = None
+                self.autonomous_navigation_restore_pending = False
+            self.publish_bt_quality_gate()
             return True
 
-        priority = (
-            self.bt_quality_autonomous_priority
-            if active
-            else self.bt_quality_normal_priority
-        )
         with self.autonomous_navigation_lock:
             with self.lock:
                 current_active = self.autonomous_navigation_active
-                current_priority = self.autonomous_navigation_priority
+                current_gate_locked = self.autonomous_navigation_gate_locked
                 current_error = self.autonomous_navigation_last_error
             if (
                 not force
                 and current_active == active
-                and current_priority == priority
+                and current_gate_locked == (not active)
                 and current_error is None
             ):
                 return True
 
             try:
-                result = subprocess.run(
-                    self.ros2_command(
-                        'param',
-                        'set',
-                        self.twist_mux_node_name,
-                        'locks.bt_quality.priority',
-                        str(priority),
-                    ),
-                    capture_output=True,
-                    text=True,
-                    timeout=6,
-                    check=False,
-                    env=os.environ.copy(),
-                )
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                detail = str(exc)
-                result = None
-            else:
+                subscriber_count = self.bt_quality_gate_pub.get_subscription_count()
+            except (AttributeError, RuntimeError):
+                subscriber_count = 0
+            if subscriber_count < 1:
                 detail = (
-                    (result.stderr or result.stdout or '').strip().splitlines()
-                    or [f'exit {result.returncode}']
-                )[0][:240]
+                    f'δεν βρέθηκε twist_mux στο gate topic '
+                    f'{self.bt_quality_gate_topic}'
+                )
+                success = False
+            else:
+                success = self.publish_bt_quality_gate(active=active)
+                detail = '' if success else 'αποτυχία δημοσίευσης gate'
 
-            success = result is not None and result.returncode == 0
             with self.lock:
-                # The logical navigation state follows the requested action;
-                # priority=None makes an unsuccessful restore visible rather
-                # than pretending that the live twist_mux is known-safe.
+                # Never claim that autonomous mode is active unless the gate
+                # was actually published to a discovered twist_mux.
                 self.autonomous_navigation_active = active if success else False
-                self.autonomous_navigation_priority = priority if success else None
+                self.autonomous_navigation_gate_locked = not active if success else True
+                self.autonomous_navigation_priority = (
+                    self.bt_quality_normal_priority if success else None
+                )
                 self.autonomous_navigation_last_error = None if success else detail
                 self.autonomous_navigation_last_change_at = time.time()
                 self.autonomous_navigation_restore_pending = not success
@@ -4593,24 +4583,50 @@ class DashboardNode(Node):
 
             if success:
                 self.get_logger().info(
-                    'twist_mux BT-quality lock priority set to '
-                    f'{priority} (autonomous={active})'
+                    'Dashboard BT-quality gate set to '
+                    f'{"released" if active else "locked"} '
+                    f'({self.bt_quality_gate_topic})'
                 )
             else:
                 self.get_logger().warning(
-                    'Could not set twist_mux BT-quality lock priority '
-                    f'to {priority}: {detail}'
+                    'Could not update Dashboard BT-quality gate: '
+                    f'{detail}'
                 )
             return success
 
+    def publish_bt_quality_gate(self, active=None):
+        """Publish the current effective BT-quality lock state."""
+        if not rclpy.ok():
+            return False
+        if active is None:
+            with self.lock:
+                active = self.autonomous_navigation_active
+        message = Bool()
+        message.data = not (
+            bool(active) and self.autonomous_navigation_bypass_bt_quality
+        )
+        try:
+            self.bt_quality_gate_pub.publish(message)
+        except (AttributeError, RuntimeError) as exc:
+            with self.lock:
+                self.autonomous_navigation_last_error = str(exc)
+                self.autonomous_navigation_restore_pending = True
+            return False
+        return True
+
     def autonomous_navigation_lock_tick(self):
-        """Retry the fail-closed BT-quality priority after startup/errors."""
+        """Retry the fail-closed BT-quality gate after startup/errors."""
         with self.lock:
             pending = self.autonomous_navigation_restore_pending
             active = self.autonomous_navigation_active
             attempts = self.autonomous_navigation_restore_attempts
             next_at = self.autonomous_navigation_restore_next_at
         if not pending or active or attempts >= self.autonomous_navigation_restore_max_attempts:
+            return
+        try:
+            if self.bt_quality_gate_pub.get_subscription_count() < 1:
+                return
+        except (AttributeError, RuntimeError):
             return
         now = time.monotonic()
         if next_at and now < next_at:
@@ -4621,7 +4637,7 @@ class DashboardNode(Node):
             self.autonomous_navigation_restore_next_at = now + 2.0
         if self.set_autonomous_navigation_mode(False, force=True):
             self.get_logger().debug(
-                f'Restored normal BT-quality lock priority on attempt {attempt}'
+                    f'Restored normal BT-quality gate on attempt {attempt}'
             )
 
     def start_process(self, attribute, args):
@@ -6714,6 +6730,13 @@ class DashboardNode(Node):
                 'Περίμενε να ολοκληρωθεί το αυτόματο Global Localization'
             )
         with self.lock:
+            if (
+                self.state.get('emergency_stop') is True
+                or self.state.get('safety_stop') is True
+            ):
+                raise RuntimeError(
+                    'Η πλοήγηση είναι μπλοκαρισμένη από το safety ή emergency stop.'
+                )
             if self.navigation_goal_handle is not None or self.navigation_status in (
                 'sending',
                 'navigating',
@@ -6939,6 +6962,7 @@ class DashboardNode(Node):
             patrol_total = self.patrol_total
             patrol_completed = self.patrol_completed
             autonomous_navigation_active = self.autonomous_navigation_active
+            autonomous_navigation_gate_locked = self.autonomous_navigation_gate_locked
             autonomous_navigation_priority = self.autonomous_navigation_priority
             autonomous_navigation_last_error = self.autonomous_navigation_last_error
         if restore_after_snapshot:
@@ -6981,9 +7005,10 @@ class DashboardNode(Node):
                 'active': bool(autonomous_navigation_active),
                 'bt_quality_bypassed': bool(
                     autonomous_navigation_active
-                    and autonomous_navigation_priority
-                    == self.bt_quality_autonomous_priority
+                    and not autonomous_navigation_gate_locked
                 ),
+                'bt_quality_gate_topic': self.bt_quality_gate_topic,
+                'bt_quality_gate_locked': bool(autonomous_navigation_gate_locked),
                 'bt_quality_priority': autonomous_navigation_priority,
                 'last_error': autonomous_navigation_last_error,
                 'safety_locks_retained': True,

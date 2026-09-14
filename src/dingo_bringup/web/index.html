@@ -940,7 +940,12 @@
         const type=state.status==='failed'||state.status==='rejected'?'bad':state.action_ready?'ok':'';
         setPill('navPill',labels[state.status]||state.status,type);
         const autonomous=state.autonomous_mode||{};
-        if(autonomous.active) setPill('navSafetyPill','Autonomous · E-stop ενεργό','ok');
+        const safety=(currentState&&currentState.safety)||{};
+        const emergencyStop=safety.emergency_stop;
+        const safetyStop=safety.safety_stop;
+        if(emergencyStop===true) setPill('navSafetyPill','E-stop πατημένο','bad');
+        else if(safetyStop===true) setPill('navSafetyPill','Safety stop ενεργό','bad');
+        else if(autonomous.active) setPill('navSafetyPill','Autonomous · E-stop ενεργό','ok');
         else if(autonomous.last_error) setPill('navSafetyPill','BT lock σφάλμα','bad');
         else setPill('navSafetyPill','BT lock ασφαλές','ok');
         const navReady=Boolean(state.running&&state.action_ready), lifecycleReady=state.navigation_lifecycle_active===true;
@@ -961,7 +966,9 @@
         $('navPose').disabled=!canSetPose;
         $('navPose').classList.toggle('active',initialPoseMode);
         $('navPose').textContent=initialPoseMode?'× Ακύρωση θέσης':'📍 Ορισμός θέσης';
-        if(state.status==='localizing') text('navigationHint','Γίνεται αντιστοίχιση LiDAR με τον χάρτη. Αν χρειαστεί, το Dingo θα περιστραφεί αργά· κράτησε την περιοχή ελεύθερη.');
+        if(emergencyStop===true) text('navigationHint','Η κίνηση είναι μπλοκαρισμένη: απελευθέρωσε πρώτα το κόκκινο emergency stop.');
+        else if(safetyStop===true) text('navigationHint','Η κίνηση είναι μπλοκαρισμένη από το safety stop.');
+        else if(state.status==='localizing') text('navigationHint','Γίνεται αντιστοίχιση LiDAR με τον χάρτη. Αν χρειαστεί, το Dingo θα περιστραφεί αργά· κράτησε την περιοχή ελεύθερη.');
         else if(state.status==='ready'&&!state.localized) text('navigationHint',state.feedback&&state.feedback.message?state.feedback.message:'Το Nav2 είναι έτοιμο. Περιμένω το LiDAR για αυτόματο Global Localization.');
         else if(state.status==='ready') text('navigationHint','Nav2 έτοιμο. Πάτησε πάνω σε ελεύθερο σημείο του χάρτη για να πάει εκεί το Dingo.');
         else if((state.status==='sending'||state.status==='navigating')&&state.path_status==='computing') text('navigationHint','Υπολογίζεται η διαδρομή από το Nav2…');

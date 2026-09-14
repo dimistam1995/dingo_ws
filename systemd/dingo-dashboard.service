@@ -13,9 +13,6 @@ Environment=PYTHONUNBUFFERED=1
 Environment=ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
 Environment=RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 ExecStart=/usr/bin/env -i HOME=/home/dimi PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET RMW_IMPLEMENTATION=rmw_fastrtps_cpp /bin/bash -lc '. /opt/ros/jazzy/setup.bash && . /home/dimi/dingo_ws/install/setup.bash && exec /usr/bin/python3 /home/dimi/dingo_ws/install/dingo_bringup/lib/dingo_bringup/dingo_dashboard.py --ros-args -p host:=127.0.0.1 -p port:=8090 -p auto_start_map:=dingo_map -p auto_localize:=true -p auto_relocalize:=true -p autonomous_navigation_bypass_bt_quality:=true'
-# If the process is interrupted before a Nav2 result arrives, restore the
-# normal BT-quality lock while the Clearpath platform remains alive.
-ExecStopPost=-/home/dimi/dingo_ws/systemd/reset_bt_quality_lock.sh dd100_10000002
 Restart=on-failure
 RestartSec=3
 
