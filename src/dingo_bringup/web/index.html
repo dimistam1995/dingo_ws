@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08121f">
+  <title>Dingo Control Center</title>
+  <style>
+    :root{--bg:#08121f;--panel:#101e2d;--line:#263b52;--text:#f1f6fb;--muted:#91a5ba;--blue:#4c9cff;--green:#42d39a;--yellow:#ffc857;--red:#ff5964;--orange:#ff9f43;--shadow:0 14px 35px #0005}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(circle at 90% -10%,#1d4262 0,#08121f 42%);color:var(--text);font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{padding:0 0 calc(82px + env(safe-area-inset-bottom))}button,input{font:inherit}button{cursor:pointer;color:inherit;border:0}.app{max-width:1120px;margin:auto;padding:18px 18px 0}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px}.brand{display:flex;align-items:center;gap:11px}.brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#67b3ff,#2867d8);font-weight:900;font-size:21px;box-shadow:0 8px 22px #2874dc55}.brand h1{margin:0;font-size:20px;letter-spacing:.12em}.brand small{display:block;color:var(--muted);font-size:11px;letter-spacing:.05em}.top-actions{display:flex;align-items:center;gap:9px}.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#0e1b2a;border-radius:999px;padding:7px 10px;color:var(--muted);font-size:12px;white-space:nowrap}.dot{width:8px;height:8px;border-radius:50%;background:var(--yellow);box-shadow:0 0 10px currentColor}.pill.ok{color:var(--green)}.pill.ok .dot{background:var(--green)}.pill.bad{color:var(--red)}.pill.bad .dot{background:var(--red)}
+    .stop-top{background:var(--red);border-radius:11px;padding:10px 15px;font-weight:800;letter-spacing:.08em;box-shadow:0 6px 18px #ff596455}.poweroff-top{background:#4a341d;border:1px solid #88652f;border-radius:11px;padding:10px 13px;color:#ffd76f;font-weight:750;white-space:nowrap}.poweroff-top:hover{background:#604522}.poweroff-top:active,.stop-top:active,.stop-button:active{transform:scale(.97)}.view{display:none}.view.active{display:block}
+    .hero{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:22px;background:linear-gradient(135deg,#142d47,#101e2d 65%);overflow:hidden;position:relative}.hero:after{content:"";position:absolute;width:190px;height:190px;right:-80px;top:-90px;border:1px solid #74baff28;border-radius:50%;box-shadow:0 0 0 28px #74baff0d,0 0 0 58px #74baff08}.eyebrow{color:var(--blue);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}.hero h2{margin:5px 0;font-size:clamp(22px,4vw,32px);line-height:1.15}.hero p{margin:0;color:var(--muted)}.hero-status{position:relative;z-index:1;text-align:right}.hero-status strong{display:block;color:var(--green);font-size:19px}.hero-status span{color:var(--muted);font-size:12px}.card{background:linear-gradient(150deg,#142437,#0f1c2a);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.grid{display:grid;gap:14px;margin-top:14px}.metrics{grid-template-columns:repeat(4,1fr)}.two{grid-template-columns:repeat(2,1fr)}.card-pad{padding:17px}.card h3,.card h2{margin:0}.metric{min-height:108px}.metric-label{color:var(--muted);font-size:12px}.metric-value{font-size:27px;font-weight:750;margin-top:7px}.metric-value small{font-size:13px;color:var(--muted);font-weight:500}.metric-sub{color:var(--muted);font-size:12px;margin-top:2px}.battery-card{display:flex;align-items:center;gap:16px}.battery-ring{--level:0%;width:67px;height:67px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--green) var(--level),#26394e 0);position:relative;flex:none}.battery-ring:after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--panel)}.battery-ring span{position:relative;z-index:1;font-weight:800;font-size:14px}.safety-card{display:flex;align-items:center;justify-content:space-between;gap:18px}.safety-state{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:750}.safety-icon{width:35px;height:35px;border-radius:11px;display:grid;place-items:center;background:#123c31;color:var(--green);font-weight:900}.safety-icon.warn{background:#4b1820;color:var(--red)}.safety-detail{color:var(--muted);font-size:12px;text-align:right}.spec-list,.sensor-list{display:grid;gap:9px;margin-top:13px}.row{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #ffffff0c;padding-bottom:7px}.row:last-child{border-bottom:0;padding-bottom:0}.row span:first-child{color:var(--muted)}.row span:last-child{text-align:right;font-variant-numeric:tabular-nums}.section-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:8px 2px 13px}.section-head h2{font-size:24px;margin:0}.section-head p{margin:3px 0 0;color:var(--muted)}.section-head .eyebrow{margin-bottom:3px}
+    .map-toolbar{padding:14px;margin-bottom:14px}.map-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.action{background:#1a3450;border:1px solid #355a7b;border-radius:11px;padding:10px 13px;font-weight:700;font-size:13px}.action:hover{background:#214465}.action.primary{background:#176c69;border-color:#2caa94}.action.primary:hover{background:#1d817b}.action.danger{background:#5a2630;border-color:#9b3d4d}.action:disabled{opacity:.45;cursor:not-allowed}.map-input,.room-input,.nav-map{min-width:180px;flex:1;background:#0a1725;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px 12px;outline:none}.map-input:focus,.room-input:focus,.nav-map:focus{border-color:var(--blue)}.mapping-hint{color:var(--muted);font-size:12px;margin:10px 2px 0}.rviz-row,.nav-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px;padding-top:11px;border-top:1px solid #ffffff0c}.rviz-row .rviz-hint,.nav-row .nav-hint{flex:1;color:var(--muted);font-size:12px;min-width:220px}.nav-pose.active{background:#7a4f20;border-color:#d58b36}.map-card{padding:10px;min-height:300px;display:grid;place-items:center;background:#091521;border-radius:18px;border:1px solid var(--line);overflow:hidden}.map-card canvas{display:block;max-width:100%;height:auto;image-rendering:pixelated;border-radius:10px;cursor:crosshair;touch-action:none}.map-legend{display:flex;align-items:center;justify-content:center;gap:13px;flex-wrap:wrap;padding:9px 4px 2px;color:var(--muted);font-size:11px}.map-legend span{display:inline-flex;align-items:center;gap:5px}.legend-dot{width:9px;height:9px;border-radius:50%;display:inline-block}.legend-dot.robot{background:var(--blue)}.legend-dot.lidar{background:var(--orange)}.legend-dot.room{background:#9d7aff}.legend-dot.goal{background:var(--red)}.empty-map{color:var(--muted);text-align:center;padding:50px 20px}.map-meta{display:flex;justify-content:space-between;gap:12px;margin-top:11px;color:var(--muted);font-size:12px}.room-card h3,.saved-card h3{font-size:17px}.room-help{color:var(--muted);font-size:12px;margin:5px 0 13px}.room-add-row{display:flex;gap:8px}.room-mode{white-space:nowrap}.room-mode.active{background:#7a4f20;border-color:#d58b36}.room-hint{color:var(--orange);font-size:12px;min-height:20px;margin-top:9px}.room-list,.saved-list{display:grid;gap:8px;margin-top:8px;max-height:230px;overflow:auto}.room-row,.saved-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #ffffff0c;background:#0c1927;border-radius:10px;padding:9px 10px}.room-row strong,.saved-row strong{font-size:13px}.room-row small,.saved-row small{display:block;color:var(--muted);font-size:11px}.delete-room{background:transparent;color:var(--red);font-size:18px;padding:0 3px}.empty-list{color:var(--muted);font-size:12px;padding:8px 2px}
+    .drive-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px}.drive-card{padding:20px;text-align:center}.drive-help{color:var(--muted);margin:0 0 14px;font-size:13px}.drive-pad{display:grid;grid-template-columns:repeat(3,76px);justify-content:center;gap:9px;margin:15px auto 22px}.drive-pad button{height:64px;border-radius:16px;background:#1c3955;border:1px solid #376081;font-size:27px;box-shadow:0 7px 16px #0003;touch-action:none;user-select:none}.drive-pad button:active{background:#2e71ad;transform:scale(.95)}.drive-pad .empty{visibility:hidden}.stop-button{grid-column:2;background:var(--red)!important;border-color:#ff8188!important;font-size:14px!important;font-weight:900;letter-spacing:.05em}.speed-control{text-align:left;max-width:300px;margin:auto;padding-top:10px;border-top:1px solid var(--line)}.speed-control label{display:flex;justify-content:space-between;color:var(--muted);font-size:13px}.speed-control output{color:var(--text);font-weight:700}.speed-control input{width:100%;accent-color:var(--blue);margin-top:9px}.speed-note{color:var(--muted);font-size:11px;margin-top:6px}.drive-warning{background:#342b16;color:#ffd76f;border:1px solid #775e23;padding:11px 13px;border-radius:12px;font-size:12px;margin-bottom:15px;text-align:left}.live-dot{color:var(--green)}
+    .api-list{display:grid;gap:8px;margin-top:12px;max-height:420px;overflow:auto}.api-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #ffffff0c;background:#0c1927;border-radius:10px;padding:9px 10px}.api-row strong{display:block;color:var(--text);font:12px ui-monospace,monospace;overflow-wrap:anywhere}.api-row small{display:block;color:var(--muted);font-size:11px;margin-top:2px;overflow-wrap:anywhere}.api-state{color:var(--green);font-size:11px;white-space:nowrap}.api-state.off{color:var(--muted)}
+    .sensor-card h3{font-size:17px}.sensor-card .topic,.topic{color:var(--blue);font-family:ui-monospace,monospace;font-size:11px;overflow-wrap:anywhere}.sensor-card .big{font-size:29px;font-weight:800;margin-top:8px}.sensor-card .muted{color:var(--muted);font-size:12px}.perception-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px}.camera-card,.radar-card{padding:14px}.camera-stage{min-height:270px;margin-top:12px;background:#07111c;border:1px solid var(--line);border-radius:13px;display:grid;place-items:center;overflow:hidden}.camera-stage img{display:block;width:100%;height:auto;max-height:460px;object-fit:contain}.camera-placeholder{color:var(--muted);text-align:center;padding:45px 20px;font-size:13px}.camera-footer{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:12px}.camera-footer .action{font-size:12px;padding:8px 10px}.radar-card canvas{display:block;width:100%;height:auto;background:#07111c;border:1px solid var(--line);border-radius:13px;margin-top:12px}.radar-footer{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px;margin-top:10px}.perception-note{color:var(--muted);font-size:12px;margin:12px 2px 0}.bottom-nav{position:fixed;z-index:10;left:50%;bottom:0;transform:translateX(-50%);width:min(760px,100%);padding:9px 12px calc(9px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,1fr);gap:7px;background:#0b1725ee;border-top:1px solid var(--line);backdrop-filter:blur(18px)}.nav-btn{background:transparent;color:var(--muted);padding:8px 4px;border-radius:12px;font-size:10px}.nav-btn .nav-icon{display:block;font-size:21px;line-height:22px;margin-bottom:2px}.nav-btn.active{background:#1b3652;color:var(--text)}.nav-btn.active .nav-icon{color:var(--blue)}.toast{position:fixed;left:50%;top:18px;transform:translate(-50%,-150%);transition:transform .25s ease;background:#1b2f44;border:1px solid var(--line);padding:10px 14px;border-radius:12px;box-shadow:var(--shadow);z-index:20;font-size:13px;max-width:calc(100% - 30px);text-align:center}.toast.show{transform:translate(-50%,0)}
+    @media(max-width:820px){.app{padding:14px 13px 0}.topbar{align-items:flex-start}.top-actions{gap:6px}.top-actions .pill{padding:6px 8px}.stop-top,.poweroff-top{padding:9px 11px}.metrics{grid-template-columns:repeat(2,1fr)}.two,.drive-layout,.perception-grid,.overview-secondary{grid-template-columns:1fr}.hero{padding:18px}.hero-status{display:none}.drive-pad{grid-template-columns:repeat(3,72px)}.drive-pad button{height:60px}.section-head h2{font-size:22px}.camera-stage{min-height:220px}}
+    @media(max-width:520px){.map-actions{display:grid;grid-template-columns:1fr 1fr}.map-actions .map-input{grid-column:1 / -1;min-width:0}.map-actions .action{width:100%;padding:9px 6px;font-size:12px}.room-add-row{flex-wrap:wrap}.room-input{min-width:0;width:100%}.room-mode{width:100%}.camera-footer{align-items:flex-start;flex-direction:column}.camera-footer .action{width:100%}.poweroff-top span{display:none}.poweroff-top{padding:9px 11px}}
+    @media(max-width:380px){.brand h1{font-size:17px}.brand-mark{width:37px;height:37px}.pill{font-size:10px}.metrics{gap:9px}.metric{min-height:100px}.card-pad{padding:14px}.nav-btn{font-size:9px}.nav-btn .nav-icon{font-size:19px}}
+    .map-alignment{color:var(--orange)}.legend-dot.path{background:var(--green)}.overview-map-card{padding:14px;margin-top:14px}.overview-map-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.overview-map-head h3{margin:3px 0}.overview-map-head p{color:var(--muted);font-size:12px;margin:3px 0 0}.overview-map-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.map-angle-control{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);background:#0a1725;border-radius:11px;color:var(--muted);font-size:12px;white-space:nowrap}.map-angle-control input{width:140px;accent-color:var(--blue)}.map-angle-control output{min-width:38px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}.overview-map-stage{min-height:260px;margin-top:12px;background:#091521;border:1px solid var(--line);border-radius:13px;display:grid;place-items:center;overflow:hidden}.overview-map-stage canvas{display:block;width:100%;height:min(58vh,460px);object-fit:contain;image-rendering:pixelated}.overview-map-empty{color:var(--muted);text-align:center;padding:55px 20px;font-size:13px}.overview-map-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:9px;color:var(--muted);font-size:11px}.overview-map-legend{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:9px;color:var(--muted);font-size:11px}.overview-map-legend span{display:inline-flex;align-items:center;gap:5px}.overview-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-status-main{display:flex;align-items:center;gap:8px;margin-top:8px}.overview-status-main strong{font-size:20px}.overview-status-dot{width:10px;height:10px;flex:none;border-radius:50%;background:var(--yellow);box-shadow:0 0 10px currentColor}.overview-status-dot.ok{background:var(--green);color:var(--green)}.overview-status-dot.bad{background:var(--red);color:var(--red)}.overview-status-list{display:grid;gap:8px;margin-top:11px}.overview-status-list .row{font-size:12px}.overview-status-list .row span:last-child{max-width:64%;overflow-wrap:anywhere}.overview-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:13px}.overview-actions .action{width:100%;font-size:12px}.bottom-nav{grid-template-columns:repeat(7,1fr)}@media(max-width:820px){.overview-secondary{grid-template-columns:1fr}}@media(max-width:520px){.map-angle-control{grid-column:1 / -1;width:100%}.map-angle-control input{flex:1;width:auto}.overview-map-actions .map-angle-control{grid-column:auto;width:auto}}
+  </style>
+  <style>
+    .rviz-launch-card{min-height:340px;padding:30px;text-align:center;background:radial-gradient(circle at 50% 20%,#1b3855,#0f1c2a 68%)}
+    .rviz-launch-copy{display:grid;place-items:center}.rviz-icon{font-size:58px;line-height:1;margin-bottom:8px;filter:drop-shadow(0 8px 14px #0006)}
+    .rviz-launch-card h3{font-size:22px;margin:0 0 6px}.rviz-launch-card p{max-width:650px;margin:0;color:var(--muted)}
+    .rviz-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:20px}.rviz-actions a.action{text-decoration:none;display:inline-block}.rviz-details{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:18px;color:var(--muted);font-size:12px}.rviz-details code{color:var(--blue);font-family:ui-monospace,monospace}
+    .rviz-viewer{width:100%;height:min(68vh,720px);margin-top:24px;border:1px solid #3d6284;border-radius:14px;overflow:hidden;background:#050b12;box-shadow:0 12px 28px #0005}.rviz-viewer iframe{display:block;width:100%;height:100%;border:0;background:#050b12}
+  </style>
+  <style>
+    .assistant-card{padding:16px}.assistant-messages{display:grid;gap:10px;min-height:230px;max-height:52vh;overflow:auto;padding:4px 2px 12px}.assistant-empty{color:var(--muted);text-align:center;padding:70px 18px 55px}.assistant-message{max-width:min(86%,720px);border:1px solid var(--line);border-radius:14px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}.assistant-message.user{justify-self:end;background:#164c67;border-color:#2b789b}.assistant-message.dingo{justify-self:start;background:#0c1927}.assistant-message.error{border-color:#9b3d4d;background:#3a1d27}.assistant-message small{display:block;color:var(--muted);font-size:10px;margin-bottom:3px}.assistant-composer{display:flex;gap:9px;align-items:flex-end;border-top:1px solid #ffffff0c;padding-top:13px}.assistant-input{width:100%;min-height:54px;max-height:150px;resize:vertical;background:#0a1725;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px 12px;outline:none;font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}.assistant-input:focus{border-color:var(--blue)}.assistant-composer .action{flex:none}.assistant-hint{color:var(--muted);font-size:12px;margin:10px 2px 0}.voice-monitor{margin-bottom:14px}.voice-monitor-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.voice-monitor-state{font-size:22px;font-weight:800;margin-top:8px}.voice-monitor-detail{color:var(--muted);font-size:12px;margin-top:3px;min-height:18px}.voice-meter{height:10px;background:#091521;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-top:13px}.voice-meter span{display:block;height:100%;width:0%;border-radius:inherit;background:linear-gradient(90deg,var(--green),var(--blue));transition:width .15s ease}.voice-monitor-meta{margin-top:11px;display:grid;gap:7px}.voice-monitor-meta .row span:last-child{max-width:68%;overflow-wrap:anywhere}.bottom-nav{grid-template-columns:repeat(9,1fr)}
+    .voice-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:13px}.voice-feature{border:1px solid #ffffff0c;border-radius:10px;background:#0c1927;padding:9px 10px;color:var(--muted);font-size:11px}.voice-feature strong{display:block;color:var(--text);font-size:12px;margin-top:2px}.voice-feature.on strong{color:var(--green)}.voice-angle{font-size:18px!important;font-weight:800;color:var(--blue)!important}.voice-angle.quiet{color:var(--muted)!important}
+    .voice-direction-control{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:13px;padding:10px 11px;border:1px solid #ffffff0c;border-radius:11px;background:#0c1927}.voice-direction-control label{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:700;font-size:12px}.voice-direction-control input{width:18px;height:18px;accent-color:var(--green)}.voice-direction-control small{color:var(--muted);font-size:11px;text-align:right}
+    .llm-control{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;padding:14px 16px}.llm-control p{color:var(--muted);font-size:12px;margin:4px 0 0}.llm-control select{min-width:245px;background:#0a1725;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px 12px;outline:none}.llm-control select:focus{border-color:var(--blue)}
+    .gemini-usage-card{margin-bottom:14px}.gemini-usage-card .big{font-size:24px;font-weight:800;line-height:1.2;margin-top:9px}.gemini-usage-note{color:var(--muted);font-size:12px;margin-top:9px;max-width:780px}.gemini-usage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:14px}.gemini-usage-stat{border:1px solid #ffffff0c;border-radius:11px;background:#0c1927;padding:10px}.gemini-usage-stat span{display:block;color:var(--muted);font-size:11px}.gemini-usage-stat strong{display:block;margin-top:2px;font-size:17px;font-variant-numeric:tabular-nums}.gemini-usage-footer{color:var(--muted);font-size:11px;margin-top:11px}
+    .identity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.identity-card{padding:16px}.identity-card .big{font-size:22px;font-weight:750;margin-top:10px;line-height:1.3}.identity-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.identity-actions .action{flex:1;min-width:120px}.identity-input{width:100%;background:#0a1725;color:var(--text);border:1px solid var(--line);border-radius:11px;padding:10px 12px;outline:none;margin-top:12px}.identity-input:focus{border-color:var(--blue)}.identity-list{color:var(--muted);font-size:12px;margin-top:12px;min-height:19px}.vision-question-row{display:flex;gap:8px;margin-top:13px}.vision-question-row input{min-width:0;flex:1;background:#0a1725;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 10px;outline:none}.vision-question-row input:focus{border-color:var(--blue)}.vision-detail{margin-top:12px;padding:10px 11px;border:1px solid #ffffff0c;border-radius:11px;background:#0c1927;color:var(--muted);font-size:12px;min-height:42px}.identity-note{color:var(--muted);font-size:12px;margin:12px 2px 0}
+    @media(max-width:820px){.identity-grid{grid-template-columns:1fr}.voice-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:520px){.assistant-composer{align-items:stretch;flex-direction:column}.assistant-composer .action{width:100%}}
+  </style>
+  <style>
+    .voice-audio-control{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.voice-audio-control small{color:var(--muted);font-size:11px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark">D</div><div><h1>DINGO</h1><small>DD100 · CONTROL CENTER</small></div></div>
+      <div class="top-actions"><div id="networkPill" class="pill"><i class="dot"></i><span>Σύνδεση…</span></div><button id="powerOffButton" class="poweroff-top" title="Τερματισμός Mini PC" aria-label="Τερματισμός Mini PC">⏻ <span>Τερματισμός</span></button><button id="topStop" class="stop-top">STOP</button></div>
+    </header>
+
+    <main>
+      <section id="view-overview" class="view active">
+        <div class="hero card"><div><div class="eyebrow">Clearpath Robotics</div><h2>Καλημέρα, Dingo.</h2><p>Κέντρο ελέγχου για το DD100 σου.</p></div><div class="hero-status"><strong id="heroStatus">Αναμονή</strong><span id="heroUpdated">Δεν έχει ληφθεί telemetry</span></div></div>
+        <article class="card overview-map-card"><div class="overview-map-head"><div><div class="eyebrow">Live map</div><h3>Χάρτης & θέση Dingo</h3><p>Ο ίδιος χάρτης με LiDAR, localization και διαδρομή Nav2.</p></div><div class="overview-map-actions"><label class="map-angle-control" title="Σύρε με το ποντίκι ή το δάχτυλο για ελεύθερη περιστροφή"><span>Γωνία</span><input id="overviewMapRotationRange" type="range" min="0" max="359" step="1" value="90"><output id="overviewMapRotationValue">90°</output></label><button id="overviewMapRotate" class="action">↻ +90°</button><button id="overviewMapOpen" class="action primary">⌖ Άνοιγμα πλήρους χάρτη</button></div></div><div class="overview-map-stage"><div id="overviewMapEmpty" class="overview-map-empty">Περιμένω τον ενεργό χάρτη…</div><canvas id="overviewMapCanvas" hidden></canvas></div><div class="overview-map-meta"><span id="overviewMapMeta">Ο χάρτης θα εμφανιστεί όταν είναι διαθέσιμος.</span><span id="overviewMapAlignment">Το localization περιμένει.</span></div><div class="overview-map-legend"><span><i class="legend-dot robot"></i>Dingo</span><span><i class="legend-dot lidar"></i>LiDAR</span><span><i class="legend-dot path"></i>Διαδρομή</span><span><i class="legend-dot goal"></i>Στόχος</span></div></article>
+        <div class="grid metrics overview-priority">
+          <article class="card card-pad battery-card"><div id="batteryRing" class="battery-ring"><span id="batteryValue">—</span></div><div><div class="metric-label">Μπαταρία</div><div id="batteryVoltage" class="metric-value">—<small> V</small></div><div class="metric-sub">DD100 platform</div></div></article>
+          <article class="card card-pad safety-card"><div><div class="metric-label">Ασφάλεια κίνησης</div><div class="safety-state"><span id="safetyIcon" class="safety-icon">✓</span><span id="safetyValue">Άγνωστη</span></div></div><div id="safetyDetail" class="safety-detail">Έλεγχος stop…</div></article>
+          <article class="card card-pad overview-status-card"><div class="metric-label">Nav2 & localization</div><h3 style="margin-top:4px">Πλοήγηση</h3><div class="overview-status-main"><span id="overviewNavDot" class="overview-status-dot"></span><strong id="overviewNavState">—</strong></div><div id="overviewNavDetail" class="metric-sub">Αναμονή Nav2</div><div class="overview-status-list"><div class="row"><span>Θέση</span><span id="overviewLocalizationState">—</span></div><div class="row"><span>Χάρτης</span><span id="overviewMapState">—</span></div></div></article>
+          <article class="card card-pad overview-status-card"><div class="metric-label">Voice assistant</div><h3 style="margin-top:4px">Alexa / μικρόφωνο</h3><div class="overview-status-main"><span id="overviewVoiceDot" class="overview-status-dot"></span><strong id="overviewVoiceState">—</strong></div><div id="overviewVoiceDetail" class="metric-sub">Αναμονή μικροφώνου</div><div class="overview-status-list"><div class="row"><span>Wake word</span><span id="overviewWakeState">—</span></div><div class="row"><span>Τελευταίο κείμενο</span><span id="overviewTranscript">—</span></div></div></article>
+        </div>
+        <div class="grid metrics overview-telemetry">
+          <article class="card card-pad metric"><div class="metric-label">Ταχύτητα</div><div id="speedValue" class="metric-value">—<small> m/s</small></div><div class="metric-sub">γραμμική</div></article>
+          <article class="card card-pad metric"><div class="metric-label">Θέση odometry</div><div id="poseValue" class="metric-value">—</div><div id="poseSub" class="metric-sub">x / y μέτρα</div></article>
+          <article class="card card-pad metric"><div class="metric-label">LiDAR</div><div id="lidarValue" class="metric-value">—</div><div class="metric-sub"><span id="lidarSub">αναμονή topic</span></div></article>
+          <article class="card card-pad metric"><div class="metric-label">Κάμερα / YOLO</div><div id="overviewCameraValue" class="metric-value">—</div><div id="overviewCameraSub" class="metric-sub">αναμονή RealSense</div></article>
+        </div>
+        <div class="grid two overview-secondary">
+          <article class="card card-pad metric"><div class="metric-label">Dingo battery input</div><div id="totalPowerValue" class="metric-value">—<small> W</small></div><div id="computerPowerValue" class="metric-sub">12 V current-sense: —</div><div id="mcuDirectPowerValue" class="metric-sub">MCU direct: δεν μετριέται</div><div id="totalPowerSub" class="metric-sub">MCU + motor drivers + onboard · external PC εκτός μέτρησης</div></article>
+          <article class="card card-pad overview-actions-card"><div class="eyebrow">Quick actions</div><h3>Γρήγορος έλεγχος</h3><div class="overview-actions"><button id="overviewMapButton" class="action">⌖ Χάρτης & Nav2</button><button id="overviewAssistantButton" class="action">💬 Βοηθός</button><button id="overviewCameraButton" class="action">◉ Κάμερα</button><button id="overviewRvizButton" class="action">🛰️ RViz2</button></div><div class="metric-sub" style="margin-top:11px">Το STOP και ο τερματισμός Mini PC είναι πάντα επάνω δεξιά.</div></article>
+        </div>
+      </section>
+
+      <section id="view-map" class="view">
+        <div class="section-head"><div><div class="eyebrow">Mapping & rooms</div><h2>Χάρτης σπιτιού</h2><p>Κάνε SLAM, αποθήκευσε τον χάρτη και βάλε ονόματα στα δωμάτια.</p></div><span id="mapStatus" class="pill"><i class="dot"></i><span>Αναμονή</span></span></div>
+        <div class="map-toolbar card"><div class="map-actions"><button id="startMapping" class="action primary">▶ Έναρξη SLAM</button><button id="stopMapping" class="action danger" disabled>■ Τερματισμός</button><input id="mapName" class="map-input" placeholder="Όνομα χάρτη, π.χ. Σπίτι"><button id="saveMap" class="action" disabled>💾 Αποθήκευση</button><label class="map-angle-control" title="Σύρε με το ποντίκι ή το δάχτυλο για ελεύθερη περιστροφή"><span>Γωνία</span><input id="mapRotationRange" type="range" min="0" max="359" step="1" value="90"><output id="mapRotationValue">90°</output></label><button id="mapRotate" class="action">↻ +90°</button></div><div id="mappingHint" class="mapping-hint">Ξεκίνα SLAM και οδήγησε αργά το Dingo σε όλους τους χώρους.</div><div class="rviz-row"><span id="rvizPill" class="pill"><i class="dot"></i><span>RViz2 native</span></span><button id="rvizMapOpen" class="action">🛰️ Άνοιγμα RViz2</button><span id="rvizHint" class="rviz-hint">Το πραγματικό RViz2 ανοίγει σε ξεχωριστό παράθυρο και χρησιμοποιεί το map, LiDAR και TF του Dingo.</span></div><div class="nav-row"><span id="navPill" class="pill"><i class="dot"></i><span>Nav2 κλειστό</span></span><select id="navMap" class="nav-map" aria-label="Χάρτης πλοήγησης"><option value="">Διάλεξε αποθηκευμένο χάρτη</option></select><button id="navStart" class="action primary">▶ Ενεργοποίηση Nav2</button><button id="navGlobal" class="action" disabled>🔍 Αυτόματη εύρεση</button><button id="navPose" class="action nav-pose" disabled>📍 Ορισμός θέσης</button><button id="navCancel" class="action" disabled>× Ακύρωση στόχου</button><button id="navStop" class="action danger" disabled>■ Κλείσιμο Nav2</button></div><div id="navigationHint" class="mapping-hint">Διάλεξε χάρτη και ενεργοποίησε Nav2. Η «Αυτόματη εύρεση» ταιριάζει πρώτα το LiDAR με τον χάρτη και περιστρέφεται μόνο αν χρειαστεί.</div></div>
+        <div class="map-card card"><div id="emptyMap" class="empty-map">Δεν υπάρχει ακόμη χάρτης στο <strong>/dd100_10000002/map</strong>.<br>Πάτησε «Έναρξη SLAM» για να ξεκινήσεις.</div><canvas id="mapCanvas" hidden></canvas><div class="map-legend"><span><i class="legend-dot robot"></i>Dingo</span><span><i class="legend-dot lidar"></i>LiDAR / εμπόδια</span><span><i class="legend-dot room"></i>Δωμάτια</span><span><i class="legend-dot path"></i>Διαδρομή Nav2</span><span><i class="legend-dot goal"></i>Στόχος</span></div></div>
+        <div class="map-meta"><span id="mapInfo">Ο χάρτης θα εμφανιστεί όταν ξεκινήσει SLAM ή localization.</span><span id="mapAlignment" class="map-alignment">Το LiDAR περιμένει έγκυρο localization.</span><span id="mapFrame"></span></div>
+        <div class="grid two">
+          <article class="card card-pad room-card"><div class="eyebrow">Room labels</div><h3>Ονόματα δωματίων</h3><p class="room-help">Γράψε το όνομα και πάτησε «Κλικ στον χάρτη». Μετά διάλεξε τη θέση του δωματίου.</p><div class="room-add-row"><input id="roomName" class="room-input" placeholder="π.χ. Σαλόνι"><button id="roomMode" class="action room-mode">＋ Κλικ στον χάρτη</button></div><div id="roomHint" class="room-hint"></div><div id="roomList" class="room-list"><div class="empty-list">Δεν έχουν προστεθεί δωμάτια.</div></div></article>
+          <article class="card card-pad saved-card"><div class="eyebrow">Saved maps</div><h3>Αποθηκευμένοι χάρτες</h3><p class="room-help">Οι χάρτες αποθηκεύονται στο νέο Dingo workspace.</p><div id="savedList" class="saved-list"><div class="empty-list">Δεν έχουν αποθηκευτεί χάρτες.</div></div></article>
+        </div>
+      </section>
+
+      <section id="view-rviz" class="view">
+        <div class="section-head"><div><div class="eyebrow">Native ROS 2 visualization</div><h2>Πραγματικό RViz2</h2><p>Οπτικοποίηση του χάρτη και των live δεδομένων του Dingo.</p></div><span id="rvizStatusPill" class="pill"><i class="dot"></i><span>Αναμονή</span></span></div>
+        <article class="card rviz-launch-card">
+          <div class="rviz-launch-copy"><div class="rviz-icon">🛰️</div><h3>RViz2 του Dingo</h3><p id="rvizStatusText">Πάτησε «Άνοιγμα» για να ξεκινήσει το πραγματικό RViz2 με το έτοιμο configuration.</p><div class="rviz-actions"><button id="rvizStart" class="action primary">▶ Άνοιγμα πραγματικού RViz2</button><button id="rvizStop" class="action danger" disabled>■ Κλείσιμο RViz2</button><a id="rvizDirectLink" class="action" href="" target="_blank" rel="noopener">↗ Άνοιγμα σε νέα καρτέλα</a></div><div class="rviz-details"><span>Fixed frame: <code>map</code></span><span>Map · LiDAR · TF · RobotModel · Nav2</span></div></div>
+          <div id="rvizViewer" class="rviz-viewer"><iframe id="rvizFrame" title="Πραγματικό RViz2 του Dingo" allow="clipboard-read; clipboard-write"></iframe></div>
+        </article>
+        <p class="perception-note">Η καρτέλα ελέγχει το native RViz2. Επειδή το RViz2 είναι Qt εφαρμογή, εμφανίζεται ως κανονικό παράθυρο Linux και όχι μέσα σε iframe HTML.</p>
+      </section>
+
+      <section id="view-drive" class="view">
+        <div class="section-head"><div><div class="eyebrow">Manual control</div><h2>Οδήγηση</h2><p>Χαμηλή ταχύτητα για αρχικό έλεγχο.</p></div></div>
+        <div class="drive-layout"><article class="card drive-card"><div class="drive-warning">⚠ Χρησιμοποίησε το χειριστήριο μόνο με οπτική επαφή και έχοντας διαθέσιμο το φυσικό emergency stop.</div><p class="drive-help">Κράτα πατημένο ένα βέλος. Με το άφημα στέλνεται αυτόματο STOP.</p><div class="drive-pad"><button class="empty" aria-hidden="true"></button><button data-drive-l="1" aria-label="Μπροστά">↑</button><button class="empty" aria-hidden="true"></button><button data-drive-a="1" aria-label="Αριστερά">↺</button><button id="driveStop" class="stop-button">STOP</button><button data-drive-a="-1" aria-label="Δεξιά">↻</button><button class="empty" aria-hidden="true"></button><button data-drive-l="-1" aria-label="Πίσω">↓</button><button class="empty" aria-hidden="true"></button></div><div class="speed-control"><label for="speedRange"><span>Μέγιστη ταχύτητα</span><output id="speedOutput">0.12 m/s</output></label><input id="speedRange" type="range" min="0.02" max="0.25" step="0.01" value="0.12"><div class="speed-note">Το όριο αποθηκεύεται και εφαρμόζεται και από το ROS backend.</div></div></article><article class="card card-pad"><div class="eyebrow">Command link</div><h3>Σύνδεση κίνησης</h3><div class="sensor-list"><div class="row"><span>Topic</span><span class="topic">/dd100_10000002/cmd_vel</span></div><div class="row"><span>Τύπος</span><span>TwistStamped</span></div><div class="row"><span>Watchdog</span><span class="live-dot">450 ms</span></div><div class="row"><span>Όριο angular</span><span id="angularLimit">0.8 rad/s</span></div></div></article></div>
+      </section>
+
+      <section id="view-sensors" class="view">
+        <div class="section-head"><div><div class="eyebrow">Robot telemetry & hardware</div><h2>Αισθητήρες</h2><p>Live topics και τα πραγματικά μοντέλα που είναι τοποθετημένα στο Dingo.</p></div></div>
+        <div class="grid two"><article class="card card-pad sensor-card"><div class="eyebrow">Platform odometry</div><h3>Odometry</h3><div id="odomSensor" class="big">—</div><div class="sensor-list"><div class="row"><span>Frame</span><span id="odomFrame">—</span></div><div class="row"><span>Linear x</span><span id="odomLinear">—</span></div><div class="row"><span>Angular z</span><span id="odomAngular">—</span></div></div></article><article class="card card-pad sensor-card"><div class="eyebrow">2D laser telemetry</div><h3>LiDAR live</h3><div id="scanSensor" class="big">—</div><div class="sensor-list"><div class="row"><span>Frame</span><span id="scanFrame">—</span></div><div class="row"><span>Topic</span><span class="topic">/scan</span></div></div></article><article class="card card-pad sensor-card"><div class="eyebrow">Mounted hardware</div><h3>Hokuyo UTM-30LX-EW</h3><div class="hardware-name">UUTM013</div><div class="sensor-list"><div class="row"><span>Κέλυφος</span><span>62 × 62 × 87.5 mm</span></div><div class="row"><span>Scan</span><span>270° · 0.25°</span></div><div class="row"><span>TF βάσης</span><span class="live-dot">Μέτρηση pending</span></div></div></article><article class="card card-pad sensor-card"><div class="eyebrow">Mounted hardware</div><h3>Intel RealSense D455</h3><div class="hardware-name">RGB-D camera</div><div class="sensor-list"><div class="row"><span>Κέλυφος</span><span>124 × 29 × 26 mm</span></div><div class="row"><span>Depth</span><span>86° × 57° · 0.6–6 m</span></div><div class="row"><span>TF βάσης</span><span class="live-dot">Μέτρηση pending</span></div></div></article><article class="card card-pad sensor-card"><div class="eyebrow">Battery management</div><h3>Battery</h3><div id="batterySensor" class="big">—</div><div class="sensor-list"><div class="row"><span>Voltage</span><span id="batterySensorVoltage">—</span></div><div class="row"><span>Current</span><span id="batteryCurrentSensor">—</span></div><div class="row"><span>Power</span><span id="batteryPowerSensor">—</span></div><div class="row"><span>Source</span><span class="topic">/dd100_10000002/platform/bms/state</span></div></div></article><article class="card card-pad sensor-card power-card"><div class="eyebrow">Power telemetry</div><h3>Ισχύς & κατανάλωση</h3><div id="totalPowerSensor" class="big">—</div><div class="sensor-list"><div class="row"><span>Dingo battery input</span><span id="totalPowerDetail">—</span></div><div class="row"><span>12 V current-sense (όχι external PC)</span><span id="computerPowerSensor">—</span></div><div class="row"><span>Current-sense</span><span id="computerCurrentSensor">—</span></div><div class="row"><span>Voltage-sense</span><span id="computerVoltageSensor">—</span></div><div class="row"><span>MCU direct</span><span id="mcuDirectSensor">δεν μετριέται</span></div><div class="row"><span>External Mini PC</span><span>εκτός μέτρησης</span></div><div class="row"><span>Source</span><span class="topic" id="powerSourceSensor">—</span></div></div></article><article class="card card-pad sensor-card"><div class="eyebrow">Safety inputs</div><h3>Stops</h3><div id="stopsSensor" class="big">—</div><div class="sensor-list"><div class="row"><span>Emergency stop</span><span id="emergencySensor">—</span></div><div class="row"><span>Safety stop</span><span id="safetySensor">—</span></div></div></article></div>
+      </section>
+
+      <section id="view-api" class="view">
+        <div class="section-head"><div><div class="eyebrow">Clearpath ROS 2 Jazzy</div><h2>Dingo API</h2><p>Επίσημα topics, services και actions μαζί με το live ROS graph του DD100.</p></div><span id="apiPill" class="pill"><i class="dot"></i><span>Αναμονή</span></span></div>
+        <div class="grid metrics"><article class="card card-pad metric"><div class="metric-label">Official topics online</div><div id="apiTopicCount" class="metric-value">—</div><div id="apiTopicSub" class="metric-sub">Clearpath platform & sensors</div></article><article class="card card-pad metric"><div class="metric-label">Services online</div><div id="apiServiceCount" class="metric-value">—</div><div class="metric-sub">AMCL, Nav2, platform</div></article><article class="card card-pad metric"><div class="metric-label">Actions online</div><div id="apiActionCount" class="metric-value">—</div><div class="metric-sub">Navigate / recovery</div></article><article class="card card-pad metric"><div class="metric-label">ROS namespace</div><div id="apiNamespace" class="metric-value" style="font-size:18px;overflow-wrap:anywhere">—</div><div id="apiSchema" class="metric-sub">—</div></article></div>
+        <div class="grid two"><article class="card card-pad"><div class="eyebrow">Live topics</div><h3>Clearpath topics</h3><div id="apiTopicList" class="api-list"><div class="empty-list">Αναμονή ROS graph…</div></div></article><article class="card card-pad"><div class="eyebrow">Live services & actions</div><h3>Control surface</h3><div id="apiServiceList" class="api-list"><div class="empty-list">Αναμονή ROS graph…</div></div><div class="eyebrow" style="margin-top:16px">Actions</div><div id="apiActionList" class="api-list"><div class="empty-list">Αναμονή ROS graph…</div></div></article></div>
+      </section>
+
+      <section id="view-assistant" class="view">
+        <div class="section-head"><div><div class="eyebrow">Dingo voice assistant</div><h2>Ρώτα και δώσε εντολές</h2><p>Πες «Alexa» και περίμενε το beep. Μετά μίλησε κανονικά στα ελληνικά. Οι κινήσεις περνούν από τους ίδιους ελέγχους ασφαλείας.</p></div><span id="assistantPill" class="pill"><i class="dot"></i><span>Αναμονή</span></span></div>
+        <article class="card card-pad voice-monitor">
+          <div class="voice-monitor-head"><div><div class="eyebrow">Live microphone</div><h3>Κατάσταση ακρόασης</h3></div><span id="voiceWakePill" class="pill"><i class="dot"></i><span>Wake word</span></span></div>
+          <div id="voiceMonitorState" class="voice-monitor-state">Αναμονή μικροφώνου</div>
+          <div id="voiceMonitorDetail" class="voice-monitor-detail">—</div>
+          <div class="voice-meter" aria-label="Στάθμη μικροφώνου"><span id="voiceMeterBar"></span></div>
+          <div class="voice-audio-control"><button id="voiceAudioToggle" class="action primary" type="button">▶ Άκουσε το μικρόφωνο</button><small id="voiceAudioState">Κλειστό · πάτησε το κουμπί και χρησιμοποίησε ακουστικά</small></div>
+          <div class="voice-audio-control"><button id="voiceMobileToggle" class="action primary" type="button">🎙️ Μίλησε από το κινητό</button><small id="voiceMobileState">Κλειστό · το κινητό θα στείλει ήχο στον βοηθό</small></div>
+          <div class="voice-monitor-meta"><div class="row"><span>Αναγνώριση φωνής</span><span id="voiceSttBackend">—</span></div><div class="row"><span>Τελευταίο κείμενο</span><span id="voiceLastTranscript">—</span></div><div class="row"><span>Wake score</span><span id="voiceWakeScore">—</span></div><div class="row"><span>Κατεύθυνση φωνής</span><span id="voiceDirection" class="voice-angle quiet">—</span></div></div>
+          <div class="voice-feature-grid"><div id="voiceFeatureDoa" class="voice-feature"><span>DoA / VAD</span><strong>Αναμονή</strong></div><div id="voiceFeatureBeam" class="voice-feature"><span>Beamforming</span><strong>Αναμονή</strong></div><div id="voiceFeatureNoise" class="voice-feature"><span>Noise reduction</span><strong>Αναμονή</strong></div><div id="voiceFeatureEcho" class="voice-feature"><span>Echo cancellation</span><strong>Αναμονή</strong></div><div id="voiceFeatureGain" class="voice-feature"><span>Auto gain</span><strong>Αναμονή</strong></div><div id="voiceFeatureLed" class="voice-feature"><span>Τοπική ένδειξη</span><strong id="voiceLedState">LED / Dashboard</strong></div></div>
+          <div class="voice-direction-control"><label><input id="voiceDirectionToggle" type="checkbox"><span>Ενεργοποίηση κατεύθυνσης φωνής</span></label><small id="voiceDirectionToggleState">Κλειστή · δεν στρίβει τη βάση</small></div>
+        </article>
+        <article class="card llm-control">
+          <div><div class="eyebrow">Assistant brain</div><h3>Επιλογή LLM</h3><p id="llmProviderHint">Τοπικό Qwen · FastFlowLM · δεν στέλνει την ερώτηση στο cloud.</p><label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="nativeToolToggle" type="checkbox"><span>Native tool calling</span></label><small style="display:block;color:var(--muted);margin-top:5px">Κλειστό = γρηγορότερο JSON fallback. Άνοιξέ το μόνο όταν θέλεις native εργαλεία.</small></div>
+          <select id="llmProviderSelect" aria-label="Επιλογή LLM"><option value="flm">Τοπικό Qwen · γρήγορο</option><option value="gemini">Gemini 2.5 Flash · cloud</option></select>
+        </article>
+        <article class="card card-pad">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><div class="eyebrow">Tool Gateway</div><h3>Πρακτικός έλεγχος συστήματος</h3></div><span id="toolGatewayPill" class="pill"><i class="dot"></i><span>Αναμονή</span></span></div>
+          <p id="toolGatewayDetail" class="gemini-usage-note">Το LLM μπορεί να ζητά επιτρεπόμενες ενέργειες για το Dingo και τα υποσυστήματα.</p>
+          <div class="sensor-list"><div class="row"><span>Τελευταία ενέργεια</span><span id="toolGatewayLastAction">—</span></div><div class="row"><span>Προστασίες</span><span id="toolGatewayProtections">allow-list · emergency stop · Nav2 · timeouts</span></div></div>
+        </article>
+        <article class="card card-pad gemini-usage-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><div class="eyebrow">Google Gemini</div><h3>Όριο & χρήση</h3></div><span id="geminiQuotaPill" class="pill"><i class="dot"></i><span>Αναμονή χρήσης</span></span></div>
+          <div id="geminiQuotaValue" class="big">Μη διαθέσιμο από API key</div>
+          <div id="geminiQuotaNote" class="gemini-usage-note">Το ακριβές υπόλοιπο quota δεν επιστρέφεται από το Gemini API με απλό API key.</div>
+          <div class="gemini-usage-grid"><div class="gemini-usage-stat"><span>Κλήσεις σήμερα</span><strong id="geminiRequestsToday">0</strong></div><div class="gemini-usage-stat"><span>Tokens σήμερα</span><strong id="geminiTokensToday">0</strong></div><div class="gemini-usage-stat"><span>Μοντέλο</span><strong id="geminiModel" style="font-size:13px;overflow-wrap:anywhere">gemini-2.5-flash</strong></div></div>
+          <div class="sensor-list"><div class="row"><span>Ανάλυση τελευταίας κλήσης</span><span id="geminiTokenBreakdown">—</span></div><div class="row"><span>Τελευταία κλήση</span><span id="geminiLastCall">—</span></div><div class="row"><span>Σφάλματα σήμερα</span><span id="geminiErrors">0</span></div></div>
+          <div id="geminiUsageFooter" class="gemini-usage-footer">Μετράω τα usageMetadata από voice assistant και vision. Τα όρια είναι ανά project.</div>
+        </article>
+        <article class="card assistant-card">
+          <div id="assistantMessages" class="assistant-messages"><div class="assistant-empty">Γράψε μια ερώτηση ή εντολή για το Dingo.<br>Παραδείγματα: «Πόση RAM έχω;», «Πόσος χώρος μένει;», «Πήγαινε στην κουζίνα» ή «Κάνε μια βόλτα».</div></div>
+          <div class="assistant-composer"><textarea id="assistantInput" class="assistant-input" rows="2" maxlength="500" placeholder="Γράψε εδώ… (Ctrl+Enter για αποστολή)"></textarea><button id="assistantSend" class="action primary">➤ Αποστολή</button></div>
+          <div id="assistantHint" class="assistant-hint">Οι ερωτήσεις και οι εντολές από πληκτρολόγιο ή μικρόφωνο εμφανίζονται εδώ. Οι κινήσεις ξεκινούν αμέσως μόνο όταν το Dingo είναι σωστά εντοπισμένο και ασφαλές.</div>
+        </article>
+      </section>
+
+      <section id="view-perception" class="view">
+        <div class="section-head"><div><div class="eyebrow">Perception</div><h2>Κάμερα & εμπόδια</h2><p>Εικόνα από τη RealSense και 2D radar από το LiDAR.</p></div></div>
+        <div class="perception-grid">
+          <article class="card camera-card"><div class="eyebrow">RGB camera</div><h3>Live κάμερα</h3><div class="camera-stage"><div id="cameraEmpty" class="camera-placeholder">Δεν έχει έρθει ακόμη εικόνα.<br>Πάτησε «Ενεργοποίηση κάμερας».</div><img id="cameraImage" alt="Dingo live camera" hidden></div><div class="camera-footer"><span id="cameraPill" class="pill"><i class="dot"></i><span>Αναμονή</span></span><button id="cameraToggle" class="action primary">▶ Ενεργοποίηση κάμερας</button></div><div id="cameraTopic" class="topic" style="margin-top:9px">/camera/camera/color/image_raw</div></article>
+          <article class="card radar-card"><div class="eyebrow">2D LiDAR</div><h3>Εμπόδια γύρω από το Dingo</h3><canvas id="lidarCanvas" width="600" height="430"></canvas><div class="radar-footer"><span id="radarCount">Αναμονή scan…</span><span id="radarRange">εύρος 8 m</span></div></article>
+          <article class="card card-pad sensor-card"><div class="eyebrow">YOLO11n · CPU · RealSense</div><h3>Τι βλέπει το Dingo</h3><div id="visionPill" class="pill"><i class="dot"></i><span>Αναμονή εικόνας</span></div><div id="visionSummary" class="big" style="font-size:20px;line-height:1.35;margin-top:14px">Η αναγνώριση αντικειμένων δεν είναι ενεργή.</div><div id="visionObjects" class="muted" style="margin-top:10px">—</div><div class="vision-question-row"><input id="visionQuestion" maxlength="500" placeholder="Π.χ. τι γράφει η πινακίδα;"><button id="visionAsk" class="action primary">Ρώτα</button></div><div id="visionDetail" class="vision-detail">Οι λεπτομερείς ερωτήσεις στέλνουν τη ζωντανή εικόνα στο Gemini μόνο όταν πατήσεις «Ρώτα».</div></article>
+        </div>
+        <p class="perception-note">Τα σημεία του LiDAR είναι σε σχέση με το ρομπότ: μπροστά είναι πάνω, αριστερά είναι αριστερά. Η κάμερα χρειάζεται ενεργό RealSense driver.</p>
+      </section>
+
+      <section id="view-identity" class="view">
+        <div class="section-head"><div><div class="eyebrow">New identity layer</div><h2>Πρόσωπο & φωνή</h2><p>Νέα τοπική αναγνώριση για να ξέρει ποιος βρίσκεται μπροστά του και ποιος μίλησε.</p></div><span id="identityPill" class="pill"><i class="dot"></i><span>Αναμονή</span></span></div>
+        <div class="identity-grid">
+          <article class="card identity-card"><div class="eyebrow">YuNet + SFace</div><h3>Αναγνώριση προσώπου</h3><div id="facePill" class="pill" style="margin-top:10px"><i class="dot"></i><span>Αναμονή</span></div><div id="faceStatus" class="big">Δεν έχει ξεκινήσει.</div><input id="faceName" class="identity-input" maxlength="48" placeholder="Όνομα, π.χ. Dimi"><div class="identity-actions"><button id="faceEnroll" class="action primary">＋ Εγγραφή</button><button id="faceCancel" class="action">Ακύρωση</button><button id="faceForget" class="action danger">Διαγραφή</button></div><div id="faceEnrolled" class="identity-list">Εγγεγραμμένα πρόσωπα: —</div><div class="identity-actions"><button id="faceAsk" class="action">Ποιος είναι μπροστά μου;</button></div></article>
+          <article class="card identity-card"><div class="eyebrow">Resemblyzer · CPU</div><h3>Αναγνώριση ομιλητή</h3><div id="speakerPill" class="pill" style="margin-top:10px"><i class="dot"></i><span>Αναμονή ReSpeaker</span></div><div id="speakerStatus" class="big">Δεν έχει ξεκινήσει.</div><input id="speakerName" class="identity-input" maxlength="48" placeholder="Όνομα, π.χ. Dimi"><div class="identity-actions"><button id="speakerEnroll" class="action primary">＋ Εγγραφή</button><button id="speakerCancel" class="action">Ακύρωση</button><button id="speakerForget" class="action danger">Διαγραφή</button></div><div id="speakerEnrolled" class="identity-list">Εγγεγραμμένες φωνές: —</div><div id="speakerScore" class="identity-list">Τελευταία ταυτοποίηση: —</div><div class="identity-actions"><button id="speakerAsk" class="action">Ποιος μίλησε τώρα;</button></div></article>
+          <article class="card identity-card"><div class="eyebrow">Safe behavior</div><h3>Follow-me</h3><div id="followPill" class="pill" style="margin-top:10px"><i class="dot"></i><span>Κλειστό</span></div><div id="followStatus" class="big">Δεν ακολουθεί.</div><div id="followTarget" class="identity-list">Στόχος: —</div><div class="identity-actions"><button id="followStart" class="action primary">▶ Έναρξη</button><button id="followStop" class="action danger">■ STOP</button></div><p class="identity-note">Το follow δεν ξεκινά μόνο του. Ζητά επιβεβαίωση, χρησιμοποιεί μόνο τον Dashboard controller και σταματά αν χαθεί ο άνθρωπος, το stream ή ενεργοποιηθεί safety.</p></article>
+        </div>
+        <p class="identity-note">Η εγγραφή προσώπου χρειάζεται την κάμερα. Η εγγραφή φωνής χρειάζεται συνδεδεμένο ReSpeaker και τρεις καθαρές, διαφορετικές φράσεις. Τα δεδομένα μένουν τοπικά ως embeddings.</p>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Κύρια πλοήγηση"><button class="nav-btn active" data-view="overview"><span class="nav-icon">⌂</span>Επισκόπηση</button><button class="nav-btn" data-view="map"><span class="nav-icon">⌖</span>Χάρτης</button><button class="nav-btn" data-view="rviz"><span class="nav-icon">🛰️</span>RViz</button><button class="nav-btn" data-view="drive"><span class="nav-icon">✣</span>Οδήγηση</button><button class="nav-btn" data-view="sensors"><span class="nav-icon">⌁</span>Αισθητήρες</button><button class="nav-btn" data-view="api"><span class="nav-icon">⌘</span>API</button><button class="nav-btn" data-view="assistant"><span class="nav-icon">💬</span>Βοηθός</button><button class="nav-btn" data-view="perception"><span class="nav-icon">◉</span>Όραση</button><button class="nav-btn" data-view="identity"><span class="nav-icon">◎</span>Ταυτότητα</button></nav>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script>
+    const base = location.pathname.endsWith('/') ? location.pathname : location.pathname + '/';
+    // noVNC builds its WebSocket URL from the hostname root.  When the
+    // Dashboard is exposed below a reverse-proxy prefix such as /dingo, keep
+    // that prefix in the path so the socket reaches this Dashboard server.
+    const dashboardPrefix = base === '/' ? '' : base.replace(/^\/+|\/+$/g, '');
+    const rvizWsPath = (dashboardPrefix ? dashboardPrefix + '/' : '') + 'rviz-ws';
+    const microphoneWsPath = (dashboardPrefix ? dashboardPrefix + '/' : '') + 'api/microphone-ws';
+    const microphoneUploadPath = (dashboardPrefix ? dashboardPrefix + '/' : '') + 'api/microphone-upload';
+    const $ = id => document.getElementById(id);
+    const text = (id, value) => { $(id).textContent = value; };
+    let driveTimer = null;
+    let activeDrive = null;
+    let currentMap = null;
+    let currentState = null;
+    let currentNavigation = null;
+    let currentRviz = null;
+    let mapRotation = 90;
+    try {
+      const savedMapRotation = Number(localStorage.getItem('dingo.mapRotation'));
+      if (Number.isFinite(savedMapRotation)) mapRotation = ((savedMapRotation % 360) + 360) % 360;
+    } catch (_) {}
+    let rooms = [];
+    let addingRoom = false;
+    let initialPoseMode = false;
+    let initialPoseDraft = null;
+    let suppressMapClick = false;
+    let cameraExpected = false;
+    let maxAngularSpeed = 0.8;
+    let assistantLastReplySeq = 0;
+    let assistantLastTranscriptSeq = 0;
+    let assistantSkipTranscript = null;
+    let assistantPending = false;
+    let microphoneSocket = null;
+    let microphoneAudioContext = null;
+    let microphoneGainNode = null;
+    let microphoneProcessorNode = null;
+    let microphonePcmQueue = [];
+    let microphonePcmQueueSamples = 0;
+    let microphoneAudioFrames = 0;
+    let microphoneNextPlayTime = 0;
+    let mobileMicSocket = null;
+    let mobileMicContext = null;
+    let mobileMicStream = null;
+    let mobileMicProcessor = null;
+    let mobileMicMute = null;
+
+    function showToast(message) {
+      text('toast', message); $('toast').classList.add('show');
+      clearTimeout(showToast.timer); showToast.timer = setTimeout(() => $('toast').classList.remove('show'), 2800);
+    }
+
+    function format(value, digits=2) { return value == null || Number.isNaN(value) ? '—' : Number(value).toFixed(digits); }
+    function setPill(id, label, type='') { const pill=$(id); pill.className='pill '+type; pill.querySelector('span').textContent=label; }
+    function setOverviewStatus(stateId, dotId, label, type='') { const state=$(stateId), dot=$(dotId); if(state)state.textContent=label; if(dot)dot.className='overview-status-dot '+type; }
+    function normalizeMapRotation(value) {
+      const number=Number(value);
+      if(!Number.isFinite(number))return mapRotation;
+      return Math.round((((number%360)+360)%360)*10)/10;
+    }
+    function setMapRotation(value,announce=false) {
+      mapRotation=normalizeMapRotation(value);
+      try { localStorage.setItem('dingo.mapRotation',String(mapRotation)); } catch (_) {}
+      updateMapRotationButtons();
+      if(currentMap) drawMap(currentMap);
+      if(announce)showToast('Ο χάρτης περιστράφηκε '+mapRotation+'°');
+    }
+    function updateMapRotationButtons() {
+      ['mapRotate','overviewMapRotate'].forEach(id=>{
+        const button=$(id); if(!button)return;
+        button.textContent='↻ +90°';
+        button.title='Περιστροφή +90° · για ελεύθερη γωνία χρησιμοποίησε τον ρυθμιστή';
+        button.setAttribute('aria-label','Περιστροφή χάρτη κατά 90 μοίρες');
+      });
+      ['mapRotationRange','overviewMapRotationRange'].forEach(id=>{
+        const range=$(id); if(range)range.value=String(Math.round(mapRotation));
+      });
+      ['mapRotationValue','overviewMapRotationValue'].forEach(id=>{
+        const output=$(id); if(output)output.textContent=Math.round(mapRotation)+'°';
+      });
+    }
+    function rotateMap() {
+      setMapRotation(mapRotation+90,true);
+    }
+    async function api(path, options={}) {
+      const response = await fetch(base+path, options);
+      let value = null;
+      try { value = await response.json(); } catch (_) {}
+      if (!response.ok) throw new Error(value && value.error ? value.error : 'Η ενέργεια απέτυχε');
+      return value;
+    }
+    function jsonOptions(value) { return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}; }
+    function stopCommand() { fetch(base+'api/drive',jsonOptions({linear:0,angular:0})).catch(()=>{}); }
+
+    function appendAssistantMessage(role, message, ok=true) {
+      const list=$('assistantMessages');
+      list.querySelector('.assistant-empty')?.remove();
+      const bubble=document.createElement('div');
+      bubble.className='assistant-message '+(role==='user'?'user':'dingo')+(ok?'':' error');
+      const label=document.createElement('small');
+      label.textContent=role==='user'?'Εσύ':'Dingo';
+      const body=document.createElement('div');
+      body.textContent=String(message||'');
+      bubble.append(label,body);list.append(bubble);list.scrollTop=list.scrollHeight;
+    }
+
+    function refreshVoiceFeature(id, enabled, label) {
+      const card=$(id); if(!card)return;
+      card.classList.toggle('on',Boolean(enabled));
+      const value=card.querySelector('strong'); if(value)value.textContent=label||(enabled?'Ενεργό':'Αναμονή');
+    }
+
+    function refreshAssistant(voice) {
+      const state=voice||{};
+      const labels={
+        offline:'Voice κλειστό', waiting_for_microphone:'Περιμένω ReSpeaker',
+        listening:'Ακούω', speech_detected:'Άκουσα φωνή',
+        wake_rejected:'Δεν αναγνωρίστηκε Alexa',
+        wake_detected:'Σε ακούω', transcribing:'Μετατρέπω σε κείμενο…',
+        queued_command:'Η εντολή μπήκε σε ουρά',
+        thinking:'Ο βοηθός σκέφτεται…', busy:'Απασχολημένο',
+        error:'Voice σφάλμα', microphone_error:'Σφάλμα μικροφώνου',
+        dependency_error:'Λείπει dependency',
+      };
+      const bad=['offline','error','microphone_error','dependency_error'].includes(state.state);
+      const active=['listening','speech_detected','wake_detected','wake_rejected','queued_command','thinking','transcribing'].includes(state.state);
+      setPill('assistantPill',labels[state.state]||state.state||'Αναμονή',bad?'bad':active?'ok':'');
+      const wakeReady=state.wake_ready===true;
+      const wakeName=state.wake_model||'Alexa';
+      setPill('voiceWakePill',wakeReady?`${wakeName} έτοιμο`:`${wakeName} · model pending`,wakeReady?'ok':'');
+      text('voiceMonitorState',labels[state.state]||state.state||'Αναμονή μικροφώνου');
+      text('voiceMonitorDetail',state.detail||(
+        wakeReady?`Πες «${wakeName}» και περίμενε το beep.`:`Το ReSpeaker ακούγεται. Δεν έχει φορτωθεί ακόμη το μοντέλο «${wakeName}».`
+      ));
+      const sttModel=state.stt_model||'—';
+      const sttBackend=String(state.stt_active_backend||state.stt_backend||'').toLowerCase();
+      const sttLabel=sttBackend==='npu'
+        ?'Whisper '+sttModel+' · AMD NPU'
+        :sttBackend==='vulkan'
+        ?'Whisper '+sttModel+' · AMD GPU Vulkan'
+        :'Whisper '+(state.stt_fallback_reason?'fallback · ':'')+sttModel+' · CPU';
+      text('voiceSttBackend',sttLabel);
+      const rms=Math.max(0,Number(state.audio_rms||0));
+      $('voiceMeterBar').style.width=Math.min(100,Math.round(rms/0.12*100))+'%';
+      text('voiceLastTranscript',state.last_transcript||'—');
+      text('voiceWakeScore',state.wake_score!=null?Number(state.wake_score).toFixed(2):'—');
+      const directionAvailable=state.direction_available===true;
+      const directionEnabled=state.direction_enabled===true;
+      const angle=state.direction_angle!=null?Number(state.direction_angle):NaN;
+      const speaking=state.direction_speech===true;
+      const directionLabel=!directionEnabled?'Απενεργοποιημένη':directionAvailable&&Number.isFinite(angle)?(format(angle,0)+'°'+(speaking?' · μιλάς':' · αναμονή')):'Δεν είναι διαθέσιμο';
+      text('voiceDirection',directionLabel);
+      $('voiceDirection').classList.toggle('quiet',!directionEnabled||!directionAvailable||!speaking);
+      $('voiceDirectionToggle').checked=directionEnabled;
+      text('voiceDirectionToggleState',directionEnabled?'Ενεργή · εμφανίζει γωνία, δεν στρίβει τη βάση':'Κλειστή · δεν στρίβει τη βάση');
+      const provider=state.llm_provider==='gemini'?'gemini':'flm';
+      $('llmProviderSelect').value=provider;
+      const nativeTools=state.llm_tool_calling==='native';
+      $('nativeToolToggle').checked=nativeTools;
+      const toolMode=nativeTools?' · native tools ενεργά':' · JSON fallback (γρήγορο)';
+      text('llmProviderHint',state.llm_fallback_active===true?'Το Gemini δεν είναι διαθέσιμο · συνεχίζω αυτόματα με τοπικό Qwen 9B.'+toolMode:provider==='gemini'?'Gemini 2.5 Flash · cloud · αν εξαντληθεί το όριο, γίνεται αυτόματα μετάβαση σε Qwen 9B.'+toolMode:'Τοπικό Qwen 9B · FastFlowLM · η ερώτηση μένει στον υπολογιστή.'+toolMode);
+      if(state.state==='thinking')text('voiceMonitorState',provider==='gemini'?'Το Gemini σκέφτεται…':'Ο τοπικός βοηθός σκέφτεται…');
+      const features=state.voice_features||{};
+      refreshVoiceFeature('voiceFeatureDoa',directionEnabled&&directionAvailable,directionEnabled?('DoA '+(speaking?'ακούει':'έτοιμο')):'Κλειστή');
+      refreshVoiceFeature('voiceFeatureBeam',features.beamforming===true,'Ενεργό');
+      refreshVoiceFeature('voiceFeatureNoise',features.noise_reduction===true,'Ενεργό');
+      refreshVoiceFeature('voiceFeatureEcho',features.echo_cancellation===true,'Ενεργό');
+      refreshVoiceFeature('voiceFeatureGain',features.automatic_gain===true,'Ενεργό');
+      const ledLabels={
+        listening:'Μπλε · αναμονή',direction:'Πράσινο · κατεύθυνση φωνής',
+        processing:'Κόκκινο · Whisper / LLM',error:'Κόκκινο · σφάλμα',
+        off:'Σβηστό',idle:'Σβηστό',unknown:'Αναμονή κατάστασης'
+      };
+      const ledState=String(state.led_state||'unknown');
+      text('voiceLedState',directionAvailable?(ledLabels[ledState]||ledState):'Dashboard μόνο');
+      const transcriptSeq=Number(state.transcript_seq||0);
+      if(transcriptSeq&&transcriptSeq!==assistantLastTranscriptSeq){
+        const transcript=String(state.last_transcript||'').trim();
+        if(transcript){
+          if(assistantSkipTranscript===transcript){
+            assistantSkipTranscript=null;
+          }else{
+            appendAssistantMessage('user',transcript);
+          }
+        }
+        assistantLastTranscriptSeq=transcriptSeq;
+      }
+      const sequence=Number(state.reply_seq||0);
+      if(sequence&&sequence!==assistantLastReplySeq){
+        if(state.last_reply)appendAssistantMessage('dingo',state.last_reply,state.last_reply_ok!==false);
+        assistantLastReplySeq=sequence;assistantPending=false;$('assistantSend').disabled=false;
+      }
+      if(!assistantPending)$('assistantSend').disabled=false;
+    }
+
+    function setMicrophoneAudioState(label, active=false, bad=false) {
+      text('voiceAudioState',label);
+      $('voiceAudioToggle').textContent=active?'■ Σταμάτησε ακρόαση':'▶ Άκουσε το μικρόφωνο';
+      $('voiceAudioToggle').classList.toggle('danger',active);
+      $('voiceAudioToggle').classList.toggle('primary',!active&&!bad);
+    }
+
+    async function stopMicrophoneAudio(message='Κλειστό') {
+      const socket=microphoneSocket; microphoneSocket=null;
+      if(socket){try{socket.close();}catch(_){} }
+      const context=microphoneAudioContext; microphoneAudioContext=null;
+      const processor=microphoneProcessorNode; microphoneProcessorNode=null;
+      if(processor){try{processor.disconnect();}catch(_){} }
+      microphonePcmQueue=[]; microphonePcmQueueSamples=0; microphoneAudioFrames=0;
+      microphoneGainNode=null;
+      microphoneNextPlayTime=0;
+      if(context){try{await context.close();}catch(_){} }
+      setMicrophoneAudioState(message,false,false);
+    }
+
+    async function startMicrophoneAudio() {
+      if(microphoneSocket){await stopMicrophoneAudio();return;}
+      const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+      if(!AudioContextClass){setMicrophoneAudioState('Ο browser δεν υποστηρίζει ζωντανό ήχο.',false,true);return;}
+      let context;
+      try { context=new AudioContextClass({sampleRate:16000}); }
+      catch(_) { context=new AudioContextClass(); }
+      microphoneAudioContext=context;
+      microphoneGainNode=context.createGain();
+      microphoneGainNode.gain.value=30;
+      // A ScriptProcessor keeps one continuous playback clock.  This is more
+      // reliable than starting hundreds of tiny AudioBufferSource nodes on
+      // browsers that throttle background tabs or reschedule short buffers.
+      const processor=context.createScriptProcessor(4096,0,1);
+      microphoneProcessorNode=processor;
+      processor.onaudioprocess=event=>{
+        const output=event.outputBuffer.getChannelData(0);
+        let written=0;
+        while(written<output.length&&microphonePcmQueue.length){
+          const chunk=microphonePcmQueue[0];
+          const take=Math.min(output.length-written,chunk.length);
+          output.set(chunk.subarray(0,take),written);
+          written+=take; microphonePcmQueueSamples-=take;
+          if(take===chunk.length)microphonePcmQueue.shift();
+          else microphonePcmQueue[0]=chunk.subarray(take);
+        }
+        if(written<output.length)output.fill(0,written);
+      };
+      processor.connect(microphoneGainNode);
+      microphoneGainNode.connect(context.destination);
+      await context.resume();
+      // A short local tone confirms that the browser output is enabled before
+      // the first microphone packet arrives (and makes muted output obvious).
+      try {
+        const tone=context.createOscillator(), toneGain=context.createGain();
+        tone.frequency.value=880; toneGain.gain.setValueAtTime(0.04,context.currentTime);
+        toneGain.gain.exponentialRampToValueAtTime(0.001,context.currentTime+0.12);
+        tone.connect(toneGain); toneGain.connect(context.destination);
+        tone.start(); tone.stop(context.currentTime+0.12);
+      } catch(_) {}
+      const scheme=location.protocol==='https:'?'wss':'ws';
+      const socket=new WebSocket(scheme+'://'+location.host+'/'+microphoneWsPath);
+      socket.binaryType='arraybuffer'; microphoneSocket=socket;
+      setMicrophoneAudioState('Σύνδεση με το μικρόφωνο…');
+      socket.onopen=()=>{if(socket===microphoneSocket)setMicrophoneAudioState('Ενεργή · ζωντανός ήχος από το μικρόφωνο',true);};
+      const playMicrophoneChunk=data=>{
+        if(socket!==microphoneSocket||!microphoneAudioContext)return;
+        const samples=new Int16Array(data); if(!samples.length)return;
+        const targetRate=microphoneAudioContext.sampleRate||16000;
+        const targetLength=Math.max(1,Math.round(samples.length*targetRate/16000));
+        const output=new Float32Array(targetLength);
+        let peak=0;
+        for(let i=0;i<samples.length;i++){
+          const value=samples[i]/32768;
+          const absolute=Math.abs(value); if(absolute>peak)peak=absolute;
+        }
+        if(targetLength===samples.length){
+          for(let i=0;i<targetLength;i++)output[i]=samples[i]/32768;
+        }else{
+          for(let i=0;i<targetLength;i++){
+            const sourceIndex=i*(samples.length-1)/Math.max(1,targetLength-1);
+            const left=Math.floor(sourceIndex), right=Math.min(samples.length-1,left+1);
+            const fraction=sourceIndex-left;
+            output[i]=((samples[left]*(1-fraction))+(samples[right]*fraction))/32768;
+          }
+        }
+        microphonePcmQueue.push(output); microphonePcmQueueSamples+=output.length;
+        // Keep bounded latency if a browser tab was briefly suspended.
+        while(microphonePcmQueueSamples>32000&&microphonePcmQueue.length){
+          microphonePcmQueueSamples-=microphonePcmQueue.shift().length;
+        }
+        microphoneAudioFrames++;
+        if(microphoneAudioFrames===1)setMicrophoneAudioState('Ενεργή · λαμβάνω ζωντανό ήχο ('+Math.round(peak*1000)/10+'% στάθμη)',true);
+      };
+      socket.onmessage=event=>{
+        if(event.data instanceof Blob)event.data.arrayBuffer().then(playMicrophoneChunk).catch(()=>{});
+        else playMicrophoneChunk(event.data);
+      };
+      socket.onerror=()=>{if(socket===microphoneSocket)stopMicrophoneAudio('Σφάλμα σύνδεσης ήχου');};
+      socket.onclose=()=>{if(socket===microphoneSocket)stopMicrophoneAudio('Η ακρόαση τερματίστηκε');};
+    }
+
+    function setMobileMicState(label,active=false,bad=false) {
+      text('voiceMobileState',label);
+      $('voiceMobileToggle').textContent=active?'■ Σταμάτησε κινητό':'🎙️ Μίλησε από το κινητό';
+      $('voiceMobileToggle').classList.toggle('danger',active);
+      $('voiceMobileToggle').classList.toggle('primary',!active&&!bad);
+    }
+
+    async function stopMobileMicrophone(message='Κλειστό') {
+      const socket=mobileMicSocket; mobileMicSocket=null;
+      if(socket){try{socket.close();}catch(_){} }
+      const processor=mobileMicProcessor; mobileMicProcessor=null;
+      if(processor){try{processor.disconnect();}catch(_){} }
+      if(mobileMicMute){try{mobileMicMute.disconnect();}catch(_){} mobileMicMute=null;}
+      if(mobileMicStream){mobileMicStream.getTracks().forEach(track=>track.stop());mobileMicStream=null;}
+      const context=mobileMicContext; mobileMicContext=null;
+      if(context){try{await context.close();}catch(_){} }
+      setMobileMicState(message,false,false);
+    }
+
+    async function startMobileMicrophone() {
+      if(mobileMicSocket||mobileMicStream){await stopMobileMicrophone();return;}
+      if(!window.isSecureContext&&location.hostname!=='localhost'&&location.hostname!=='127.0.0.1'){
+        setMobileMicState('Στο κινητό χρειάζεται HTTPS για άδεια μικροφώνου.',false,true);return;
+      }
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        setMobileMicState('Ο browser δεν δίνει πρόσβαση σε μικρόφωνο.',false,true);return;
+      }
+      let stream;
+      try {
+        setMobileMicState('Ζητάω άδεια μικροφώνου…');
+        stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
+      } catch(error) {
+        setMobileMicState('Δεν δόθηκε άδεια μικροφώνου ('+(error&&error.name||'άγνωστο')+')',false,true);return;
+      }
+      mobileMicStream=stream;
+      const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+      if(!AudioContextClass){await stopMobileMicrophone('Ο browser δεν υποστηρίζει μικρόφωνο.');return;}
+      const context=new AudioContextClass(); mobileMicContext=context;
+      const source=context.createMediaStreamSource(stream);
+      const processor=context.createScriptProcessor(4096,1,1); mobileMicProcessor=processor;
+      const mute=context.createGain(); mute.gain.value=0; mobileMicMute=mute;
+      source.connect(processor); processor.connect(mute); mute.connect(context.destination);
+      await context.resume();
+      const scheme=location.protocol==='https:'?'wss':'ws';
+      const socket=new WebSocket(scheme+'://'+location.host+'/'+microphoneUploadPath);
+      socket.binaryType='arraybuffer'; mobileMicSocket=socket;
+      setMobileMicState('Σύνδεση του κινητού με τον βοηθό…');
+      processor.onaudioprocess=event=>{
+        if(socket!==mobileMicSocket||socket.readyState!==WebSocket.OPEN)return;
+        const input=event.inputBuffer.getChannelData(0), sourceRate=context.sampleRate||48000;
+        const length=Math.max(1,Math.round(input.length*16000/sourceRate));
+        const bytes=new ArrayBuffer(length*2), view=new DataView(bytes);
+        for(let i=0;i<length;i++){
+          const position=i*(input.length-1)/Math.max(1,length-1), left=Math.floor(position), right=Math.min(input.length-1,left+1);
+          const value=Math.max(-1,Math.min(1,input[left]*(1-(position-left))+input[right]*(position-left)));
+          view.setInt16(i,Math.round(value*32767),true);
+        }
+        try{socket.send(bytes);}catch(_){}
+      };
+      socket.onopen=()=>{if(socket===mobileMicSocket)setMobileMicState('Ενεργό · πες «Alexa» και μετά την εντολή',true);};
+      socket.onerror=()=>{if(socket===mobileMicSocket)stopMobileMicrophone('Σφάλμα σύνδεσης κινητού',false,true);};
+      socket.onclose=()=>{if(socket===mobileMicSocket)stopMobileMicrophone('Η σύνδεση κινητού τερματίστηκε');};
+    }
+
+    function refreshGemini(gemini) {
+      gemini=gemini||{};
+      const status=gemini.status||'waiting_for_usage';
+      const measured=status==='measured', bad=status==='error';
+      setPill('geminiQuotaPill',measured?'Usage live':bad?'Gemini σφάλμα':'Αναμονή χρήσης',bad?'bad':measured?'ok':'');
+      text('geminiQuotaValue',gemini.quota_remaining!=null?'Υπόλοιπο: '+format(gemini.quota_remaining,0):'Μη διαθέσιμο από API key');
+      text('geminiQuotaNote',gemini.quota_note_el||'Το ακριβές υπόλοιπο quota δεν επιστρέφεται από το Gemini API με απλό API key.');
+      const integer=value=>Number.isFinite(Number(value))?new Intl.NumberFormat('el-GR').format(Number(value)):'—';
+      text('geminiRequestsToday',integer(gemini.requests_today||0));
+      text('geminiTokensToday',integer(gemini.total_tokens_today||0));
+      text('geminiModel',gemini.model||'gemini-2.5-flash');
+      const last=gemini.last_usage||{};
+      const breakdown=last.total_tokens!=null?integer(last.total_tokens)+' tokens · '+integer(last.input_tokens||0)+' in / '+integer(last.output_tokens||0)+' out'+(last.thinking_tokens?(' / '+integer(last.thinking_tokens)+' thinking'):''):'—';
+      text('geminiTokenBreakdown',breakdown);
+      const lastCall=gemini.last_request_at?new Date(Number(gemini.last_request_at)*1000).toLocaleTimeString('el-GR')+' · '+(gemini.last_request_type||'assistant'):'—';
+      text('geminiLastCall',lastCall);
+      text('geminiErrors',integer(gemini.errors_today||0));
+      text('geminiUsageFooter',gemini.last_error?'Τελευταίο σφάλμα: '+gemini.last_error:'Μετράω τα usageMetadata από voice assistant και vision. Τα όρια είναι ανά project.');
+    }
+
+    function refreshToolGateway(gateway) {
+      gateway=gateway||{};
+      const enabled=gateway.enabled!==false;
+      const lastOk=gateway.last_ok;
+      setPill('toolGatewayPill',enabled?'Allow-list ενεργό':'Κλειστό',enabled?(lastOk===false?'bad':'ok'):'bad');
+      text('toolGatewayDetail',enabled
+        ?'Το LLM έχει πρακτική πρόσβαση στις επιτρεπόμενες λειτουργίες του Dingo. Δεν εκτελεί αυθαίρετο shell, αρχεία ή reboot.'
+        :'Το Tool Gateway είναι κλειστό.');
+      const action=gateway.last_target&&gateway.last_operation
+        ?gateway.last_target+' / '+gateway.last_operation+(gateway.last_service?' · '+gateway.last_service:'')
+        :'—';
+      text('toolGatewayLastAction',action+(lastOk===false?' · απορρίφθηκε':lastOk===true?' · OK':''));
+      const protections=Array.isArray(gateway.protections)?gateway.protections:[];
+      text('toolGatewayProtections',protections.length?protections.join(' · '):'allow-list');
+    }
+
+    function refreshIdentity(face, speaker, follow) {
+      face=face||{};speaker=speaker||{};follow=follow||{};
+      const faceState=face.state||'offline', faceAge=face.last_update?Date.now()/1000-Number(face.last_update):Infinity;
+      const faceLive=['ready','enrolling'].includes(faceState)&&faceAge<5;
+      const faceLabels={loading:'Φορτώνω μοντέλα…',waiting_for_camera:'Περιμένω κάμερα',ready:'Face live',enrolling:'Εγγραφή…',error:'Face σφάλμα',offline:'Face κλειστό'};
+      setPill('facePill',faceLive?(faceState==='enrolling'?'Εγγραφή…':'Face live'):(faceLabels[faceState]||faceState),faceLive?'ok':faceState==='error'?'bad':'');
+      text('faceStatus',face.message_el||'Αναμονή αναγνώρισης προσώπου.');
+      const faceNames=Array.isArray(face.enrolled)?face.enrolled:[];
+      text('faceEnrolled','Εγγεγραμμένα πρόσωπα: '+(faceNames.length?faceNames.join(' · '):'—'));
+      const speakerState=speaker.state||'offline';
+      const speakerLabels={ready:'Speaker έτοιμο',recognizing:'Αναλύω φωνή…',enrolling:'Εγγραφή…',error:'Speaker σφάλμα',disabled:'Speaker κλειστό',offline:'Περιμένω ReSpeaker'};
+      const speakerLive=['ready','recognizing','enrolling'].includes(speakerState);
+      setPill('speakerPill',speakerLabels[speakerState]||speakerState,speakerLive?'ok':speakerState==='error'?'bad':'');
+      text('speakerStatus',speaker.detail||'Αναμονή αναγνώρισης ομιλητή.');
+      const speakerNames=Array.isArray(speaker.enrolled)?speaker.enrolled:[];
+      text('speakerEnrolled','Εγγεγραμμένες φωνές: '+(speakerNames.length?speakerNames.join(' · '):'—'));
+      const score=speaker.current_score!=null?' · ομοιότητα '+format(speaker.current_score,3):'';
+      text('speakerScore',speaker.current_name?'Τελευταία ταυτοποίηση: '+speaker.current_name+score:'Τελευταία ταυτοποίηση: —');
+      const followActive=follow.active===true;
+      setPill('followPill',followActive?(follow.state==='tracking'?'Ακολουθεί':'Αναζήτηση…'):'Κλειστό',followActive?'ok':'');
+      text('followStatus',follow.detail||'Δεν ακολουθεί.');
+      const target=follow.target||{};
+      text('followTarget',target.center_x!=null?'Στόχος: '+format(target.distance_m,2)+' m · '+format(target.linear_m_s,2)+' m/s':'Στόχος: —');
+      $('followStart').disabled=followActive;$('followStop').disabled=!followActive;
+      const identityLive=faceLive||speakerLive;
+      setPill('identityPill',identityLive?'Identity live':'Αναμονή identity',identityLive?'ok':'');
+    }
+
+    function quickAssistantQuestion(question) {
+      if(assistantPending){showToast('Περίμενε να ολοκληρωθεί η προηγούμενη ερώτηση.');return;}
+      $('assistantInput').value=question;
+      const button=document.querySelector('.nav-btn[data-view="assistant"]');
+      button?.click();
+      sendAssistantCommand();
+    }
+
+    async function askVisionQuestion() {
+      const question=$('visionQuestion').value.trim()||'Περιέγραψε σύντομα τι φαίνεται στην εικόνα.';
+      try { await api('api/vision/ask',jsonOptions({question:question}));text('visionDetail','Το Gemini αναλύει τη ζωντανή εικόνα…');$('visionAsk').disabled=true;showToast('Η ερώτηση εικόνας στάλθηκε');setTimeout(()=>{$('visionAsk').disabled=false;},1200); }
+      catch(e){showToast(e.message);}
+    }
+    $('visionAsk').onclick=askVisionQuestion;
+    $('visionQuestion').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();askVisionQuestion();}});
+
+    function identityName(id) { const name=$(id).value.trim(); if(!name){showToast('Γράψε πρώτα ένα όνομα.');$(id).focus();return null;} return name; }
+    async function faceIdentityCommand(payload) { try { await api('api/identity/face',jsonOptions(payload));showToast(payload.action==='enroll'?'Κοίτα την κάμερα για να ολοκληρωθεί η εγγραφή.':'Η εντολή προσώπου στάλθηκε.'); } catch(e){showToast(e.message);} }
+    async function speakerIdentityCommand(payload) { try { await api('api/identity/speaker',jsonOptions(payload));showToast(payload.action==='enroll'?'Πες τρεις καθαρές διαφορετικές φράσεις.':'Η εντολή φωνής στάλθηκε.'); } catch(e){showToast(e.message);} }
+    $('faceEnroll').onclick=()=>{const name=identityName('faceName');if(name)faceIdentityCommand({action:'enroll',name:name});};
+    $('faceCancel').onclick=()=>faceIdentityCommand({action:'cancel'});
+    $('faceForget').onclick=()=>{const name=identityName('faceName');if(name&&window.confirm('Να διαγραφεί η εγγραφή προσώπου «'+name+'»;'))faceIdentityCommand({action:'forget',name:name});};
+    $('faceAsk').onclick=()=>quickAssistantQuestion('Ποιος είναι μπροστά μου;');
+    $('speakerEnroll').onclick=()=>{const name=identityName('speakerName');if(name)speakerIdentityCommand({action:'enroll',name:name,samples:3});};
+    $('speakerCancel').onclick=()=>speakerIdentityCommand({action:'cancel'});
+    $('speakerForget').onclick=()=>{const name=identityName('speakerName');if(name&&window.confirm('Να διαγραφεί η εγγραφή φωνής «'+name+'»;'))speakerIdentityCommand({action:'forget',name:name});};
+    $('speakerAsk').onclick=()=>quickAssistantQuestion('Ποιος μίλησε τώρα;');
+    $('followStart').onclick=async()=>{if(!window.confirm('Να ξεκινήσει το follow-me με χαμηλή ταχύτητα;'))return;try{await api('api/follow',jsonOptions({action:'start',confirmed:true}));showToast('Το follow-me ξεκίνησε με ασφάλεια.');}catch(e){showToast(e.message);}};
+    $('followStop').onclick=async()=>{try{await api('api/follow',jsonOptions({action:'stop'}));showToast('Το follow-me σταμάτησε.');}catch(e){showToast(e.message);}};
+
+    async function sendAssistantCommand() {
+      const input=$('assistantInput'),value=input.value.trim();
+      if(!value||assistantPending)return;
+      appendAssistantMessage('user',value);assistantSkipTranscript=value;input.value='';assistantPending=true;$('assistantSend').disabled=true;
+      try { await api('api/assistant',jsonOptions({text:value}));setPill('assistantPill','Στέλνω…',''); }
+      catch(e){assistantSkipTranscript=null;assistantPending=false;$('assistantSend').disabled=false;appendAssistantMessage('dingo',e.message,false);showToast(e.message);}
+    }
+    $('assistantSend').onclick=sendAssistantCommand;
+    $('assistantInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendAssistantCommand();}});
+    $('voiceAudioToggle').onclick=()=>startMicrophoneAudio().catch(error=>{
+      console.error('microphone monitor failed',error);
+      stopMicrophoneAudio('Αποτυχία ήχου στον browser · '+(error&&error.name||'έλεγχος ρυθμίσεων'));
+    });
+    $('voiceMobileToggle').onclick=()=>startMobileMicrophone().catch(error=>{
+      console.error('mobile microphone failed',error);
+      stopMobileMicrophone('Αποτυχία κινητού · '+(error&&error.name||'έλεγχος ρυθμίσεων'));
+    });
+    $('voiceDirectionToggle').onchange=async()=>{
+      const enabled=$('voiceDirectionToggle').checked;
+      $('voiceDirectionToggle').disabled=true;
+      try { await api('api/voice/direction',jsonOptions({enabled:enabled}));showToast(enabled?'Η κατεύθυνση φωνής ενεργοποιήθηκε.':'Η κατεύθυνση φωνής απενεργοποιήθηκε.'); }
+      catch(e){ $('voiceDirectionToggle').checked=!enabled; showToast(e.message); }
+      finally { $('voiceDirectionToggle').disabled=false; }
+    };
+    $('llmProviderSelect').onchange=async()=>{
+      const select=$('llmProviderSelect'),provider=select.value;
+      select.disabled=true;
+      try {
+        const result=await api('api/voice/provider',jsonOptions({provider:provider}));
+        showToast(result.provider==='gemini'?'Ενεργοποιήθηκε το Gemini 2.5 Flash.':'Ενεργοποιήθηκε το τοπικό Qwen.');
+      } catch(e) {
+        showToast(e.message);
+      } finally {
+        select.disabled=false;
+      }
+    };
+    $('nativeToolToggle').onchange=async()=>{
+      const toggle=$('nativeToolToggle'),enabled=toggle.checked;
+      toggle.disabled=true;
+      try {
+        await api('api/voice/native-tools',jsonOptions({enabled:enabled}));
+        showToast(enabled?'Ενεργοποιήθηκε το native tool calling.':'Απενεργοποιήθηκε · χρησιμοποιείται JSON fallback.');
+      } catch(e) {
+        toggle.checked=!enabled;
+        showToast(e.message);
+      } finally {
+        toggle.disabled=false;
+      }
+    };
+
+    async function refreshRviz() {
+      try {
+        const state = await api('api/rviz');
+        currentRviz = state;
+        const running = Boolean(state.process_running);
+        const available = Boolean(state.available);
+        const webReady = Boolean(state.web_ready);
+        setPill('rvizStatusPill', !available ? 'RViz2 μη διαθέσιμο' : running ? 'RViz2 live' : 'RViz2 κλειστό', !available ? 'bad' : running ? 'ok' : '');
+        setPill('rvizPill', !available ? 'RViz2 μη διαθέσιμο' : running ? 'RViz2 live' : 'RViz2 native', !available ? 'bad' : running ? 'ok' : '');
+        text('rvizStatusText', !available ? 'Δεν βρέθηκε η εγκατάσταση του RViz2 στο ROS 2.' : running && !webReady ? 'Το RViz2 ξεκινά· περιμένω να ετοιμαστεί η web προβολή…' : running ? 'Το πραγματικό RViz2 είναι ανοιχτό. Η οθόνη του εμφανίζεται παρακάτω με map, LiDAR, TF και Nav2.' : 'Το RViz2 είναι κλειστό. Πάτησε «Άνοιγμα» για να ξεκινήσει το πραγματικό RViz2.');
+        $('rvizStart').disabled = !available || running;
+        $('rvizStop').disabled = !running;
+        $('rvizMapOpen').disabled = !available || running;
+        $('rvizMapOpen').textContent = running ? '✓ RViz2 ανοιχτό' : '🛰️ Άνοιγμα RViz2';
+        if (running && webReady && state.web_url) {
+          const viewerUrl = base + state.web_url.replace(/^\/+/, '').replace('path=rviz-ws', `path=${encodeURIComponent(rvizWsPath)}`);
+          $('rvizDirectLink').href = viewerUrl;
+          if ($('rvizFrame').dataset.url !== viewerUrl) {
+            $('rvizFrame').dataset.url = viewerUrl;
+            $('rvizFrame').src = viewerUrl;
+          }
+          $('rvizViewer').hidden = false;
+        } else {
+          $('rvizViewer').hidden = true;
+          if (!running) {
+            $('rvizFrame').dataset.url = '';
+            $('rvizFrame').src = 'about:blank';
+          }
+        }
+      } catch (e) {
+        setPill('rvizStatusPill', 'RViz2 σφάλμα', 'bad');
+        setPill('rvizPill', 'RViz2 σφάλμα', 'bad');
+      }
+    }
+    async function startRviz() { try { await api('api/rviz',jsonOptions({action:'start'})); showToast('Το πραγματικό RViz2 ανοίγει…'); await refreshRviz(); setTimeout(refreshRviz,1200); } catch(e) { showToast(e.message); } }
+    async function stopRviz() { try { await api('api/rviz',jsonOptions({action:'stop'})); showToast('Το RViz2 έκλεισε'); await refreshRviz(); } catch(e) { showToast(e.message); } }
+    $('rvizStart').onclick=startRviz;
+    $('rvizStop').onclick=stopRviz;
+    $('rvizMapOpen').onclick=startRviz;
+
+    function ensureSensorTelemetryCards() {
+      if ($('sensorExtraGrid')) return;
+      const section = document.getElementById('view-sensors');
+      const head = section && section.querySelector('.section-head');
+      if (!head) return;
+      const grid = document.createElement('div');
+      grid.id = 'sensorExtraGrid';
+      grid.className = 'grid two';
+      grid.innerHTML = `
+        <article class="card card-pad sensor-card">
+          <div class="eyebrow">Inertial telemetry</div><h3>IMU</h3>
+          <div id="imuSensor" class="big">—</div>
+          <div class="sensor-list">
+            <div class="row"><span>Roll / Pitch / Yaw</span><span id="imuOrientation">—</span></div>
+            <div class="row"><span>Gyroscope x/y/z</span><span id="imuGyro">—</span></div>
+            <div class="row"><span>Acceleration x/y/z</span><span id="imuAccel">—</span></div>
+            <div class="row"><span>Rate / Frame</span><span id="imuMeta">—</span></div>
+          </div>
+        </article>
+        <article class="card card-pad sensor-card">
+          <div class="eyebrow">Localization & TF</div><h3>Θέση Dingo</h3>
+          <div id="localizationSensor" class="big">—</div>
+          <div class="sensor-list">
+            <div class="row"><span>AMCL pose</span><span id="localizationPose">—</span></div>
+            <div class="row"><span>Covariance x/y/yaw</span><span id="localizationCovariance">—</span></div>
+            <div class="row"><span>map → base_link</span><span id="localizationTf">—</span></div>
+            <div class="row"><span>Frame / age</span><span id="localizationMeta">—</span></div>
+          </div>
+        </article>
+        <article class="card card-pad sensor-card">
+          <div class="eyebrow">Live topic health</div><h3>Υγεία αισθητήρων</h3>
+          <div id="sensorHealthSensor" class="big">—</div>
+          <div id="sensorHealthList" class="sensor-list"></div>
+        </article>`;
+      head.insertAdjacentElement('afterend', grid);
+    }
+
+    function renderSensorHealth(health) {
+      const list = $('sensorHealthList');
+      if (!list) return;
+      const order = ['mcu', 'lidar', 'imu', 'camera', 'odometry', 'amcl', 'tf'];
+      const entries = order.map(key => health && health[key]).filter(Boolean);
+      const live = entries.filter(item => item.status === 'live').length;
+      text('sensorHealthSensor', entries.length ? `${live}/${entries.length} live` : '—');
+      list.textContent = '';
+      entries.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('span');
+        label.textContent = item.label || 'Sensor';
+        const value = document.createElement('span');
+        const status = item.status === 'live' ? 'LIVE' : item.status === 'stale' ? 'STALE' : 'OFFLINE';
+        const age = item.age_s == null ? '' : ` · ${format(item.age_s, 1)} s`;
+        const detail = item.detail ? ` · ${item.detail}` : '';
+        value.textContent = status + age + detail;
+        value.style.color = item.status === 'live' ? 'var(--green)' : item.status === 'stale' ? 'var(--orange)' : 'var(--red)';
+        row.append(label, value);
+        list.append(row);
+      });
+    }
+
+    async function refreshState() {
+      try {
+        ensureSensorTelemetryCards();
+        const s = await api('api/state');
+        currentState=s;
+        setPill('networkPill', s.connected ? 'Dingo online' : 'Αναμονή ROS', s.connected ? 'ok' : '');
+        refreshAssistant(s.voice);
+        const voice=s.voice||{}, voiceState=voice.state||'offline';
+        const voiceLabels={offline:'Κλειστό',waiting_for_microphone:'Περιμένω μικρόφωνο',listening:'Ακούω',speech_detected:'Άκουσα φωνή',wake_rejected:'Wake word άγνωστο',wake_detected:'Σε ακούω',transcribing:'Μετατροπή σε κείμενο…',queued_command:'Εντολή σε ουρά',thinking:'Σκέφτεται…',busy:'Απασχολημένο',error:'Σφάλμα voice',microphone_error:'Σφάλμα μικροφώνου',dependency_error:'Λείπει dependency'};
+        const voiceBad=['offline','error','microphone_error','dependency_error'].includes(voiceState), voiceActive=['listening','speech_detected','wake_detected','wake_rejected','queued_command','thinking','transcribing'].includes(voiceState);
+        setOverviewStatus('overviewVoiceState','overviewVoiceDot',voiceLabels[voiceState]||voiceState,voiceBad?'bad':voiceActive?'ok':'');
+        text('overviewVoiceDetail',voice.detail||'Η φωνητική υπηρεσία περιμένει.');
+        text('overviewWakeState',voice.wake_ready?(voice.wake_model||'Alexa')+' έτοιμο':'Δεν είναι έτοιμο');
+        text('overviewTranscript',voice.last_transcript||'—');
+        refreshGemini(s.gemini);
+        refreshToolGateway(s.tool_gateway);
+        text('heroStatus', s.connected ? 'Συνδεδεμένο' : 'Αναμονή σύνδεσης');
+        text('heroUpdated', s.connected ? 'Live platform telemetry' : 'Δεν έχει ληφθεί telemetry');
+        const b=s.battery, p=s.power, o=s.odom, scan=s.scan, imu=s.imu||{}, localization=s.localization||{}, vision=s.vision||{};
+        refreshIdentity(s.face,s.speaker,s.follow);
+        const visionAge=vision.last_update?Date.now()/1000-Number(vision.last_update):Infinity;
+        const visionLive=vision.state==='ready'&&visionAge<5;
+        const camera=s.camera||{}, cameraLive=Boolean(camera.available)||visionLive;
+        text('overviewCameraValue',visionLive?'YOLO live':cameraLive?'Κάμερα live':'Offline');
+        text('overviewCameraSub',visionLive?(vision.objects&&vision.objects.length?vision.objects.length+' αντικείμενα':'RealSense + YOLO'):cameraLive?'RealSense εικόνα διαθέσιμη':'Δεν υπάρχει stream');
+        setPill('visionPill',visionLive?'YOLO live':vision.state==='offline'?'Αναμονή detector':'Αναμονή εικόνας',visionLive?'ok':'');
+        text('visionSummary',visionLive?(vision.summary_el||'Δεν αναγνωρίζω αντικείμενα αυτή τη στιγμή.'):'Η αναγνώριση αντικειμένων δεν είναι ενεργή.');
+        const visionObjects=(vision.objects||[]).map(item=>item.label_el||item.label).join(' · ');
+        text('visionObjects',visionLive?(visionObjects||'Δεν βρέθηκαν αντικείμενα.'):'Σύνδεσε/ενεργοποίησε τη RealSense και το YOLO.');
+        const detailState=vision.detail_state||'idle';
+        text('visionDetail',detailState==='thinking'?'Το Gemini αναλύει τη ζωντανή εικόνα…':detailState==='error'?(vision.detail_answer||'Η ανάλυση εικόνας απέτυχε.'):vision.detail_answer?('Απάντηση Gemini: '+vision.detail_answer):'Οι λεπτομερείς ερωτήσεις στέλνουν τη ζωντανή εικόνα στο Gemini μόνο όταν πατήσεις «Ρώτα».');
+        if (b && b.percent != null) { text('batteryValue', format(b.percent,0)+'%'); $('batteryRing').style.setProperty('--level',Math.max(0,Math.min(100,b.percent))+'%'); text('batterySensor',format(b.percent,0)+'%'); } else { text('batteryValue','—'); text('batterySensor','—'); }
+        text('batteryVoltage', b && b.voltage != null ? format(b.voltage,2) : '—'); text('batterySensorVoltage', b && b.voltage != null ? format(b.voltage,2)+' V' : '—'); text('batteryCurrentSensor', b && b.current != null ? format(Math.abs(b.current),2)+' A' : '—'); text('batteryPowerSensor', b && b.power_w != null ? format(b.power_w,1)+' W' : '—');
+        const totalPower=p&&p.total_w!=null?format(p.total_w,1)+' W':'—'; const computerPower=p&&p.computer_w!=null?format(p.computer_w,1)+' W':'—'; const totalCurrent=p&&p.total_current!=null?format(Math.abs(p.total_current),2)+' A':'—'; const computerCurrent=p&&p.computer_current!=null?format(Math.abs(p.computer_current),2)+' A':'—'; const computerVoltage=p&&p.computer_voltage!=null?format(p.computer_voltage,2)+' V':'—'; const powerSource=p&&p.source?p.source:'αναμονή power telemetry'; text('totalPowerValue',totalPower); text('computerPowerValue','12 V current-sense: '+computerPower); text('mcuDirectPowerValue','MCU direct: δεν μετριέται'); text('totalPowerSub',p&&p.available?'MCU + motor drivers + onboard · external PC εκτός μέτρησης':'αναμονή power telemetry'); text('totalPowerSensor',totalPower); text('totalPowerDetail',totalCurrent+' · '+powerSource); text('computerPowerSensor',computerPower); text('computerCurrentSensor',computerCurrent); text('computerVoltageSensor',computerVoltage); text('mcuDirectSensor','δεν μετριέται από Power.msg'); text('powerSourceSensor',powerSource);
+        text('speedValue', o ? format(o.linear,2) : '—'); text('poseValue', o ? format(o.x,1)+', '+format(o.y,1) : '—'); text('poseSub', o ? 'x / y μέτρα' : 'χωρίς odometry'); text('odomSensor', o ? format(o.x,2)+' / '+format(o.y,2)+' m' : '—'); text('odomLinear', o ? format(o.linear,3)+' m/s' : '—'); text('odomAngular', o ? format(o.angular,3)+' rad/s' : '—'); text('odomFrame',o?'odom → base_link':'—');
+        text('lidarValue', scan ? scan.valid+' σημεία' : '—'); text('lidarSub', scan ? scan.count+' rays διαθέσιμα' : 'αναμονή topic'); text('scanSensor',scan?scan.valid+' obstacles':'—'); text('scanFrame',scan && scan.frame?scan.frame:'—'); const mapSearching=Boolean(currentNavigation&&currentNavigation.localization_searching); text('mapAlignment',mapSearching?'Αυτόματο global localization σε εξέλιξη…':localization.localized?'Το localization επιβεβαιώθηκε.':localization.pose&&scan&&scan.map_points&&scan.map_points.length?'LiDAR προσωρινό· περιμένει επιβεβαίωση localization.':'Το LiDAR περιμένει έγκυρο localization.');
+        const imuAge=imu.last_update?Date.now()/1000-Number(imu.last_update):Infinity; const imuLive=Boolean(imu.available)&&imuAge<1.5; const imuOrientation=imu.orientation||{}, imuGyro=imu.angular_velocity||{}, imuAccel=imu.linear_acceleration||{};
+        text('imuSensor',imuLive?'LIVE':imu.last_update?'STALE':'OFFLINE'); text('imuOrientation',imu.orientation?format(imuOrientation.roll_deg,1)+'° / '+format(imuOrientation.pitch_deg,1)+'° / '+format(imuOrientation.yaw_deg,1)+'°':'—'); text('imuGyro',imu.angular_velocity?format(imuGyro.x,3)+' / '+format(imuGyro.y,3)+' / '+format(imuGyro.z,3):'—'); text('imuAccel',imu.linear_acceleration?format(imuAccel.x,2)+' / '+format(imuAccel.y,2)+' / '+format(imuAccel.z,2)+' m/s²':'—'); text('imuMeta',imu.rate_hz!=null?format(imu.rate_hz,1)+' Hz · '+(imu.frame||'—'):(imu.frame||'—'));
+        const locPose=localization.pose||{}, locCov=localization.covariance||{}, locTf=localization.tf_map_base_link||{}; const locAge=localization.pose_age_s!=null?Number(localization.pose_age_s):Infinity; const tfAge=localization.tf_age_s!=null?Number(localization.tf_age_s):Infinity; const locState=localization.localized?'LOCALIZED':localization.amcl_available?'AMCL pose':'OFFLINE';
+        text('localizationSensor',locState); text('localizationPose',localization.pose?format(locPose.x,2)+' / '+format(locPose.y,2)+' m':'—'); text('localizationCovariance',localization.covariance?format(locCov.x,3)+' / '+format(locCov.y,3)+' / '+format(locCov.yaw,3):'—'); text('localizationTf',localization.tf_ok?format(locTf.x,2)+' / '+format(locTf.y,2)+' m · '+format(Number(locTf.yaw||0)*180/Math.PI,1)+'°':'missing'); text('localizationMeta',(locPose.frame||'—')+' · AMCL '+(Number.isFinite(locAge)?format(locAge,1)+' s':'—')+' · TF '+(Number.isFinite(tfAge)?format(tfAge,1)+' s':'—'));
+        renderSensorHealth(s.sensor_health||{});
+        const estop=s.emergency_stop, safety=s.safety_stop; const blocked=estop===true||safety===true; const known=estop!==null||safety!==null;
+        text('safetyValue',blocked?'STOP ενεργό':known?'Ελεύθερο':'Άγνωστη'); text('safetyDetail',blocked?'Η κίνηση έχει μπλοκαριστεί':'Τα stop inputs είναι καθαρά'); $('safetyIcon').className='safety-icon '+(blocked?'warn':''); text('safetyIcon',blocked?'!':'✓'); text('emergencySensor',estop===null?'—':estop?'ACTIVE':'clear'); text('safetySensor',safety===null?'—':safety?'ACTIVE':'clear'); text('stopsSensor',blocked?'STOP':'OK');
+        drawLidar(scan);
+        if(currentMap) drawMap(currentMap);
+      } catch (e) { setPill('networkPill','Dashboard offline','bad'); text('heroStatus','Offline'); drawLidar(null); }
+    }
+
+    function mapGeometry(m) {
+      const rotation=((Number(mapRotation)||0)%360+360)%360;
+      const radians=rotation*Math.PI/180, cosine=Math.abs(Math.cos(radians)), sine=Math.abs(Math.sin(radians));
+      const displayCells=Math.max(1,m.width*cosine+m.height*sine);
+      const scale=Math.min(2,Math.max(.35,760/displayCells));
+      const sourceWidth=Math.max(1,Math.round(m.width*scale)),sourceHeight=Math.max(1,Math.round(m.height*scale));
+      return {rotation,radians,cosine,sine,sourceWidth,sourceHeight,displayWidth:Math.max(1,Math.ceil(sourceWidth*cosine+sourceHeight*sine)),displayHeight:Math.max(1,Math.ceil(sourceWidth*sine+sourceHeight*cosine))};
+    }
+
+    function drawMap(m) {
+      const c=$('mapCanvas'),geometry=mapGeometry(m);
+      c.width=geometry.displayWidth; c.height=geometry.displayHeight;
+      const ctx=c.getContext('2d');
+      ctx.imageSmoothingEnabled=false;
+      ctx.save();
+      ctx.translate(geometry.displayWidth/2,geometry.displayHeight/2);
+      ctx.rotate(geometry.radians);
+      ctx.translate(-geometry.sourceWidth/2,-geometry.sourceHeight/2);
+      const tmp=document.createElement('canvas'); tmp.width=m.width; tmp.height=m.height;
+      const t=tmp.getContext('2d'),im=t.createImageData(m.width,m.height);
+      m.data.forEach((v,i)=>{const x=i%m.width,y=m.height-1-Math.floor(i/m.width),j=(y*m.width+x)*4,q=v<0?92:Math.max(0,255-Math.round(v*2.55));im.data[j]=q;im.data[j+1]=q;im.data[j+2]=q;im.data[j+3]=255});
+      t.putImageData(im,0,0); ctx.drawImage(tmp,0,0,geometry.sourceWidth,geometry.sourceHeight);
+      const worldToCanvas=(x,y)=>({x:(x-m.origin.x)/m.resolution*(geometry.sourceWidth/m.width),y:(m.height-(y-m.origin.y)/m.resolution)*(geometry.sourceHeight/m.height)});
+      const scan=currentState&&currentState.scan;
+      if(scan&&Array.isArray(scan.map_points)&&scan.map_points.length){
+        ctx.fillStyle=scan.map_points_trusted===false?'#ffc857':'#ff9f43';
+        scan.map_points.forEach(point=>{const p=worldToCanvas(point[0],point[1]);ctx.fillRect(p.x-1.5,p.y-1.5,3,3);});
+      }
+      const navigationPath=currentNavigation&&Array.isArray(currentNavigation.path)?currentNavigation.path:[];
+      if(navigationPath.length>1){
+        const drawPath=(strokeStyle,lineWidth)=>{
+          ctx.beginPath();
+          navigationPath.forEach((point,index)=>{
+            const x=Array.isArray(point)?point[0]:point.x;
+            const y=Array.isArray(point)?point[1]:point.y;
+            const p=worldToCanvas(Number(x),Number(y));
+            if(index===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
+          });
+          ctx.strokeStyle=strokeStyle;ctx.lineWidth=lineWidth;ctx.stroke();
+        };
+        ctx.save();ctx.lineJoin='round';ctx.lineCap='round';drawPath('#08121fd9',7);drawPath('#42d39a',3.5);ctx.restore();
+      }
+      rooms.forEach(room=>{const p=worldToCanvas(room.x,room.y);ctx.beginPath();ctx.fillStyle='#9d7aff';ctx.arc(p.x,p.y,5,0,Math.PI*2);ctx.fill();ctx.font='700 13px system-ui';const width=ctx.measureText(room.name).width;ctx.fillStyle='#08121fdd';ctx.fillRect(p.x+8,p.y-18,width+10,22);ctx.fillStyle='#f1f6fb';ctx.fillText(room.name,p.x+13,p.y-3);});
+      // Keep the current AMCL hypothesis visible after a Dashboard restart.
+      // The yellow marker is informational; only trusted map_pose is used for
+      // navigation and LiDAR projection.
+      const poseTrusted=Boolean(currentNavigation&&currentNavigation.localized&&currentState&&currentState.map_pose);
+      const pose=poseTrusted?currentState.map_pose:(currentNavigation&&currentNavigation.amcl_pose)||(currentState&&currentState.localization&&currentState.localization.pose);
+      if(pose&&!initialPoseMode){
+        const p=worldToCanvas(pose.x,pose.y),heading=Number(pose.yaw)||0;
+        ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-heading);ctx.fillStyle=poseTrusted?'#4c9cff':'#ffc857';ctx.strokeStyle='#d9ecff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-11,-10);ctx.lineTo(-7,0);ctx.lineTo(-11,10);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+        const markerLabel=poseTrusted?'DINGO':'AMCL';ctx.fillStyle='#08121fdd';ctx.fillRect(p.x+11,p.y+12,markerLabel.length===5?52:46,20);ctx.fillStyle='#f1f6fb';ctx.font='700 12px system-ui';ctx.fillText(markerLabel,p.x+16,p.y+26);
+      }
+      const initialPose=initialPoseDraft||(currentNavigation&&currentNavigation.initial_pose);
+      if(initialPose&&(!pose||initialPoseMode||initialPoseDraft)){
+        const p=worldToCanvas(initialPose.x,initialPose.y),heading=Number(initialPose.yaw)||0;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-heading);ctx.strokeStyle='#ffc857';ctx.fillStyle='#ffc857';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,11,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-7,-7);ctx.lineTo(-4,0);ctx.lineTo(-7,7);ctx.closePath();ctx.fill();ctx.restore();
+      }
+      const goal=currentNavigation&&currentNavigation.goal;
+      if(goal){
+        const p=worldToCanvas(goal.x,goal.y);
+        ctx.save();ctx.strokeStyle='#ff5964';ctx.fillStyle='#ff5964';ctx.lineWidth=3;ctx.setLineDash([7,5]);
+        if(pose&&!navigationPath.length&&currentNavigation.path_status==='computing'){const robot=worldToCanvas(pose.x,pose.y);ctx.beginPath();ctx.moveTo(robot.x,robot.y);ctx.lineTo(p.x,p.y);ctx.stroke();}
+        ctx.setLineDash([]);ctx.beginPath();ctx.arc(p.x,p.y,10,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(p.x-7,p.y);ctx.lineTo(p.x+7,p.y);ctx.moveTo(p.x,p.y-7);ctx.lineTo(p.x,p.y+7);ctx.stroke();ctx.restore();
+      }
+      ctx.restore();
+      syncOverviewMap(m);
+    }
+
+    function syncOverviewMap(m) {
+      const canvas=$('overviewMapCanvas'), empty=$('overviewMapEmpty');
+      if(!canvas||!empty)return;
+      if(!m||!m.width){
+        canvas.hidden=true;empty.hidden=false;
+        text('overviewMapMeta','Ο χάρτης θα εμφανιστεί όταν είναι διαθέσιμος.');
+        text('overviewMapAlignment','Το localization περιμένει.');
+        return;
+      }
+      const source=$('mapCanvas');
+      if(!source||!source.width||!source.height){
+        canvas.hidden=true;empty.hidden=false;
+        text('overviewMapMeta','Περιμένω δεδομένα χάρτη…');
+        return;
+      }
+      canvas.width=source.width;canvas.height=source.height;
+      const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(source,0,0);
+      canvas.hidden=false;empty.hidden=true;
+      text('overviewMapMeta',m.width+' × '+m.height+' cells · '+m.resolution+' m/px');
+      const nav=currentNavigation||{};
+      text('overviewMapAlignment',nav.localization_searching?'Global localization σε εξέλιξη…':nav.localized?'Localization επιβεβαιώθηκε.':'Περιμένω έγκυρο localization.');
+    }
+
+    async function refreshMap() {
+      try {
+        const m=await api('api/map');
+        if(!m || !m.width){currentMap=null;$('emptyMap').hidden=false;$('mapCanvas').hidden=true;setPill('mapStatus','Αναμονή','');$('saveMap').disabled=true;text('mapInfo','Ο χάρτης θα εμφανιστεί όταν ξεκινήσει SLAM ή localization.');syncOverviewMap(null);return;}
+        currentMap=m;$('emptyMap').hidden=true;$('mapCanvas').hidden=false;drawMap(m);setPill('mapStatus','Χάρτης live','ok');text('mapInfo',m.width+' × '+m.height+' cells · '+m.resolution+' m/px');text('mapFrame','frame: '+(m.frame||'map'));$('saveMap').disabled=false;
+      } catch(e) { setPill('mapStatus','Σφάλμα','bad'); syncOverviewMap(null); }
+    }
+
+    async function refreshMapping() {
+      try {
+        const state=await api('api/mapping');
+        $('startMapping').disabled=state.running || Boolean(currentNavigation&&currentNavigation.running); $('stopMapping').disabled=!state.running; $('saveMap').disabled=!state.map_available || state.saving;
+        if(state.saving) text('mappingHint','Αποθηκεύεται ο χάρτης…');
+        else if(state.running) text('mappingHint','SLAM ενεργό — οδήγησε αργά και κάλυψε όλους τους χώρους.');
+        else text('mappingHint',state.map_available?'Ο χάρτης είναι διαθέσιμος. Μπορείς να προσθέσεις δωμάτια ή να τον αποθηκεύσεις.':'Ξεκίνα SLAM και οδήγησε αργά το Dingo σε όλους τους χώρους.');
+      } catch(e) {}
+    }
+
+    async function refreshNavigation() {
+      try {
+        const state=await api('api/navigation'); currentNavigation=state;
+        if(state.map&&[...$('navMap').options].some(option=>option.value===state.map)) $('navMap').value=state.map;
+        const labels={idle:'Nav2 κλειστό',starting:'Εκκίνηση Nav2…',localizing:'Αναζήτηση θέσης…',ready:'Nav2 έτοιμο',sending:'Αποστολή στόχου…',navigating:'Πηγαίνει στον στόχο',succeeded:'Έφτασε στον στόχο',canceling:'Ακύρωση…',canceled:'Στόχος ακυρώθηκε',failed:'Αποτυχία πλοήγησης',rejected:'Στόχος απορρίφθηκε'};
+        const type=state.status==='failed'||state.status==='rejected'?'bad':state.action_ready?'ok':'';
+        setPill('navPill',labels[state.status]||state.status,type);
+        const navReady=Boolean(state.running&&state.action_ready), lifecycleReady=state.navigation_lifecycle_active===true;
+        const navLabel=!state.running?'Κλειστό':state.status==='localizing'?'Εντοπισμός…':lifecycleReady?'Έτοιμο':navReady?'Μερική ετοιμότητα':'Εκκίνηση…';
+        setOverviewStatus('overviewNavState','overviewNavDot',navLabel,state.status==='failed'||state.status==='rejected'?'bad':lifecycleReady?'ok':'');
+        text('overviewNavDetail',state.feedback&&state.feedback.message?state.feedback.message:(navReady?'Περιμένει στόχο':'Αναμονή Nav2'));
+        text('overviewLocalizationState',state.localized?'Εντοπισμένο':state.localization_searching?'Αναζήτηση…':state.amcl_pose?'AMCL pose':'Αναμονή');
+        text('overviewMapState',state.map||'—');
+        $('navStart').disabled=state.running||!$('navMap').value;
+        $('navStop').disabled=!state.running;
+        $('navCancel').disabled=!state.goal||!['sending','navigating','canceling'].includes(state.status);
+        $('navMap').disabled=state.running;
+        const moving=['sending','navigating','canceling','localizing'].includes(state.status);
+        const canSetPose=state.running&&state.action_ready&&!moving;
+        if(!canSetPose) initialPoseMode=false;
+        $('navGlobal').disabled=!state.running||!state.action_ready||moving;
+        $('navGlobal').textContent=state.status==='localizing'?'🔍 Αναζήτηση…':'🔍 Αυτόματη εύρεση';
+        $('navPose').disabled=!canSetPose;
+        $('navPose').classList.toggle('active',initialPoseMode);
+        $('navPose').textContent=initialPoseMode?'× Ακύρωση θέσης':'📍 Ορισμός θέσης';
+        if(state.status==='localizing') text('navigationHint','Γίνεται αντιστοίχιση LiDAR με τον χάρτη. Αν χρειαστεί, το Dingo θα περιστραφεί αργά· κράτησε την περιοχή ελεύθερη.');
+        else if(state.status==='ready'&&!state.localized) text('navigationHint',state.feedback&&state.feedback.message?state.feedback.message:'Το Nav2 είναι έτοιμο. Περιμένω το LiDAR για αυτόματο Global Localization.');
+        else if(state.status==='ready') text('navigationHint','Nav2 έτοιμο. Πάτησε πάνω σε ελεύθερο σημείο του χάρτη για να πάει εκεί το Dingo.');
+        else if((state.status==='sending'||state.status==='navigating')&&state.path_status==='computing') text('navigationHint','Υπολογίζεται η διαδρομή από το Nav2…');
+        else if((state.status==='sending'||state.status==='navigating')&&state.path_status==='failed') text('navigationHint','Πλοήγηση ενεργή, αλλά το Nav2 δεν επέστρεψε διαδρομή για προβολή.');
+        else if(state.status==='navigating') text('navigationHint',state.feedback&&state.feedback.distance_remaining!=null?'Πλοήγηση ενεργή — απομένουν '+format(state.feedback.distance_remaining,2)+' m.':'Πλοήγηση ενεργή…');
+        else if(state.status==='succeeded') text('navigationHint','Το Dingo έφτασε στον τελευταίο στόχο. Πάτησε νέο σημείο για επόμενη διαδρομή.');
+        else if(state.status==='failed'||state.status==='rejected') text('navigationHint',(state.feedback&&state.feedback.error)||'Η πλοήγηση απέτυχε.');
+        else if(!state.running) text('navigationHint','Διάλεξε αποθηκευμένο χάρτη και ενεργοποίησε το Nav2. Η θέση θα βρεθεί αυτόματα από το Global Localization.');
+        if(currentMap) drawMap(currentMap);
+      } catch(e) { setPill('navPill','Nav2 σφάλμα','bad'); setOverviewStatus('overviewNavState','overviewNavDot','Σφάλμα','bad'); text('overviewNavDetail','Δεν υπάρχει απάντηση από το Nav2'); }
+    }
+
+    function renderApiRows(id, items, emptyText) {
+      const list=$(id); list.textContent='';
+      if(!items.length){const empty=document.createElement('div');empty.className='empty-list';empty.textContent=emptyText;list.append(empty);return;}
+      items.forEach(item=>{
+        const row=document.createElement('div');row.className='api-row';
+        const info=document.createElement('div');
+        const strong=document.createElement('strong');strong.textContent=item.ros_name||item.relative_name||'—';
+        const small=document.createElement('small');small.textContent=(item.type||(item.types&&item.types.join(', '))||'—')+(item.description?' · '+item.description:'');
+        info.append(strong,small);
+        const state=document.createElement('span');state.className='api-state'+(item.available===false?' off':'');
+        if(item.publishers!=null) state.textContent=item.available?'live · pub '+item.publishers+' · sub '+item.subscribers:'offline';
+        else state.textContent=item.available===false?'offline':'live';
+        row.append(info,state);list.append(row);
+      });
+    }
+    async function refreshClearpathApi() {
+      try {
+        const data=await api('api/clearpath');
+        const activeTopics=data.topics.filter(item=>item.available);
+        const activeServices=data.services.filter(item=>item.available);
+        const activeActions=data.actions.filter(item=>item.available);
+        const runtimeTopics=data.runtime&&data.runtime.topics?data.runtime.topics:[];
+        const runtimeServices=data.runtime&&data.runtime.services?data.runtime.services:[];
+        const topicRows=activeTopics.concat(runtimeTopics).filter((item,index,array)=>array.findIndex(other=>(other.ros_name||other.relative_name)===(item.ros_name||item.relative_name))===index);
+        const serviceRows=activeServices.concat(runtimeServices).filter((item,index,array)=>array.findIndex(other=>(other.ros_name||other.relative_name)===(item.ros_name||item.relative_name))===index);
+        text('apiTopicCount',activeTopics.length+' / '+data.topics.length);text('apiServiceCount',activeServices.length+' / '+data.services.length);text('apiActionCount',activeActions.length+' / '+data.actions.length);text('apiNamespace','/'+data.robot.namespace);text('apiSchema',data.schema||'—');
+        setPill('apiPill','ROS graph live','ok');
+        renderApiRows('apiTopicList',topicRows,'Δεν βρέθηκαν Clearpath topics.');
+        renderApiRows('apiServiceList',serviceRows,'Δεν βρέθηκαν Clearpath services.');
+        renderApiRows('apiActionList',activeActions,'Δεν βρέθηκαν Nav2 actions.');
+      } catch(e) { setPill('apiPill','API σφάλμα','bad'); }
+    }
+
+    async function refreshRooms() {
+      try { rooms=await api('api/rooms'); renderRoomList(); } catch(e) {}
+    }
+    function renderRoomList() {
+      const list=$('roomList'); list.textContent='';
+      if(!rooms.length){list.innerHTML='<div class="empty-list">Δεν έχουν προστεθεί δωμάτια.</div>';if(currentMap)drawMap(currentMap);return;}
+      rooms.forEach(room=>{const row=document.createElement('div');row.className='room-row';const info=document.createElement('div');const strong=document.createElement('strong');strong.textContent=room.name;const small=document.createElement('small');small.textContent='x '+format(room.x,2)+' · y '+format(room.y,2)+' m';info.append(strong,small);const remove=document.createElement('button');remove.className='delete-room';remove.title='Διαγραφή';remove.textContent='×';remove.onclick=()=>deleteRoom(room.id);row.append(info,remove);list.append(row);});
+      if(currentMap)drawMap(currentMap);
+    }
+    function setRoomMode(value) { addingRoom=value; $('roomMode').classList.toggle('active',value); $('roomMode').textContent=value?'× Ακύρωση':'＋ Κλικ στον χάρτη'; text('roomHint',value?'Πάτησε τώρα πάνω στον χάρτη για να τοποθετήσεις το δωμάτιο.':''); }
+    async function deleteRoom(id) { try { await api('api/rooms',jsonOptions({action:'delete',id:id})); await refreshRooms(); showToast('Το δωμάτιο διαγράφηκε'); } catch(e) { showToast(e.message); } }
+    $('roomMode').onclick=()=>{if(!currentMap){showToast('Χρειάζεται πρώτα να υπάρχει χάρτης');return;}if(!addingRoom&&!$('roomName').value.trim()){showToast('Γράψε πρώτα το όνομα του δωματίου');$('roomName').focus();return;}initialPoseMode=false;setRoomMode(!addingRoom);};
+    function mapPointFromEvent(event) {
+      const rect=$('mapCanvas').getBoundingClientRect();
+      const geometry=mapGeometry(currentMap);
+      const displayX=Math.max(0,Math.min(geometry.displayWidth,(event.clientX-rect.left)/rect.width*geometry.displayWidth));
+      const displayY=Math.max(0,Math.min(geometry.displayHeight,(event.clientY-rect.top)/rect.height*geometry.displayHeight));
+      const offsetX=displayX-geometry.displayWidth/2,offsetY=displayY-geometry.displayHeight/2;
+      const cosine=Math.cos(geometry.radians),sine=Math.sin(geometry.radians);
+      const sourceX=offsetX*cosine+offsetY*sine+geometry.sourceWidth/2;
+      const sourceY=-offsetX*sine+offsetY*cosine+geometry.sourceHeight/2;
+      const normalizedX=Math.max(0,Math.min(1,sourceX/geometry.sourceWidth));
+      const normalizedY=Math.max(0,Math.min(1,sourceY/geometry.sourceHeight));
+      const px=normalizedX*currentMap.width;
+      const py=normalizedY*currentMap.height;
+      return {px:px,py:py,x:currentMap.origin.x+px*currentMap.resolution,y:currentMap.origin.y+(currentMap.height-py)*currentMap.resolution};
+    }
+    function initialPoseYaw() {
+      const mapPose=currentNavigation&&currentNavigation.localized&&currentState&&currentState.map_pose;
+      const savedPose=currentNavigation&&currentNavigation.initial_pose;
+      return mapPose&&mapPose.yaw!=null?Number(mapPose.yaw):savedPose&&savedPose.yaw!=null?Number(savedPose.yaw):0;
+    }
+    async function submitInitialPose(point,yaw) {
+      try { await api('api/navigation',jsonOptions({action:'initial_pose',x:point.x,y:point.y,yaw:yaw}));initialPoseMode=false;initialPoseDraft=null;showToast('Η αρχική θέση και κατεύθυνση στάλθηκαν στο Nav2');await refreshNavigation();if(currentMap)drawMap(currentMap); } catch(e) { showToast(e.message); }
+    }
+    async function setInitialPose() {
+      if(!currentMap){showToast('Χρειάζεται πρώτα να υπάρχει χάρτης');return;}
+      if(!currentNavigation||!currentNavigation.running||!currentNavigation.action_ready){showToast('Ενεργοποίησε πρώτα το Nav2 και περίμενε να γίνει έτοιμο');return;}
+      initialPoseMode=!initialPoseMode;
+      initialPoseDraft=null;
+      if(initialPoseMode){setRoomMode(false);showToast('Πάτησε στη θέση του Dingo και σύρε προς την κατεύθυνσή του');text('navigationHint','Λειτουργία αρχικής θέσης: πάτησε στη θέση του Dingo και σύρε προς την κατεύθυνση που κοιτάζει.');}
+      else {text('navigationHint','Η επιλογή αρχικής θέσης ακυρώθηκε.');}
+      $('navPose').classList.toggle('active',initialPoseMode);$('navPose').textContent=initialPoseMode?'× Ακύρωση θέσης':'📍 Ορισμός θέσης';
+      if(currentMap)drawMap(currentMap);
+    }
+    $('mapCanvas').addEventListener('pointerdown',event=>{if(!initialPoseMode||!currentMap)return;event.preventDefault();const point=mapPointFromEvent(event);initialPoseDraft={x:point.x,y:point.y,px:point.px,py:point.py,yaw:initialPoseYaw(),moved:false,pointerId:event.pointerId};$('mapCanvas').setPointerCapture?.(event.pointerId);drawMap(currentMap);});
+    $('mapCanvas').addEventListener('pointermove',event=>{if(!initialPoseDraft||event.pointerId!==initialPoseDraft.pointerId)return;const point=mapPointFromEvent(event);const dx=point.px-initialPoseDraft.px,dy=initialPoseDraft.py-point.py;if(Math.hypot(dx,dy)>7)initialPoseDraft.moved=true;if(initialPoseDraft.moved)initialPoseDraft.yaw=Math.atan2(dy,dx);initialPoseDraft.previewX=point.px;initialPoseDraft.previewY=point.py;drawMap(currentMap);});
+    $('mapCanvas').addEventListener('pointerup',async event=>{if(!initialPoseDraft||event.pointerId!==initialPoseDraft.pointerId)return;const draft={...initialPoseDraft};initialPoseDraft=null;if(!draft.moved){drawMap(currentMap);return;}suppressMapClick=true;setTimeout(()=>{suppressMapClick=false;},600);await submitInitialPose(draft,draft.yaw);});
+    $('mapCanvas').addEventListener('pointercancel',event=>{if(initialPoseDraft&&event.pointerId===initialPoseDraft.pointerId){initialPoseDraft=null;drawMap(currentMap);}});
+    $('mapCanvas').addEventListener('click',async event=>{if(suppressMapClick){suppressMapClick=false;return;}if(!currentMap)return;const point=mapPointFromEvent(event);const x=point.x,y=point.y;if(addingRoom){const name=$('roomName').value.trim();try{await api('api/rooms',jsonOptions({name:name,x:x,y:y}));$('roomName').value='';setRoomMode(false);await refreshRooms();showToast(name+' προστέθηκε στον χάρτη');}catch(e){showToast(e.message);}return;}if(initialPoseMode){await submitInitialPose(point,initialPoseYaw());return;}if(!currentNavigation||!currentNavigation.running||!currentNavigation.action_ready){showToast('Ενεργοποίησε πρώτα το Nav2 και περίμενε να γίνει έτοιμο');return;}if(!currentNavigation.localized){showToast('Περίμενε να ολοκληρωθεί το αυτόματο Global Localization');return;}const cellX=Math.floor((x-currentMap.origin.x)/currentMap.resolution);const cellY=Math.floor((y-currentMap.origin.y)/currentMap.resolution);const cell=cellX>=0&&cellX<currentMap.width&&cellY>=0&&cellY<currentMap.height?currentMap.data[cellY*currentMap.width+cellX]:-1;if(cell<0||cell>65){showToast('Διάλεξε ελεύθερο, γνωστό σημείο του χάρτη');return;}try{await api('api/navigation',jsonOptions({action:'goal',x:x,y:y}));showToast('Ο στόχος στάλθηκε στο Dingo');await refreshNavigation();}catch(e){showToast(e.message);}});
+
+    async function startMapping() { try { await api('api/mapping',jsonOptions({action:'start'}));showToast('Η χαρτογράφηση ξεκίνησε');await refreshMapping(); } catch(e) { showToast(e.message); } }
+    async function stopMapping() { try { await api('api/mapping',jsonOptions({action:'stop'}));showToast('Η χαρτογράφηση σταμάτησε');await refreshMapping(); } catch(e) { showToast(e.message); } }
+    async function saveMap() { const name=$('mapName').value.trim()||'dingo_map';try{await api('api/map/save',jsonOptions({name:name}));showToast('Ο χάρτης αποθηκεύεται ως '+name);$('mapName').value='';setTimeout(refreshMaps,3500);await refreshMapping();}catch(e){showToast(e.message);}}
+    async function refreshMaps() { try { const maps=await api('api/maps');const list=$('savedList'),select=$('navMap'),selected=select.value;list.textContent='';select.textContent='';if(!maps.length){list.innerHTML='<div class="empty-list">Δεν έχουν αποθηκευτεί χάρτες.</div>';select.innerHTML='<option value="">Δεν υπάρχει αποθηκευμένος χάρτης</option>';return;}maps.forEach(item=>{const row=document.createElement('div');row.className='saved-row';const strong=document.createElement('strong');strong.textContent=item.name;const small=document.createElement('small');small.textContent=new Date(item.updated*1000).toLocaleString('el-GR');row.append(strong,small);list.append(row);const option=document.createElement('option');option.value=item.name;option.textContent=item.name;select.append(option);});select.value=maps.some(item=>item.name===selected)?selected:maps[0].name;refreshNavigation();}catch(e){} }
+    async function startNavigation() { try { await api('api/navigation',jsonOptions({action:'start',map:$('navMap').value}));showToast('Το Nav2 ξεκινά και θα κάνει αυτόματο Global Localization');await refreshNavigation();await refreshMapping(); } catch(e) { showToast(e.message); } }
+    async function startGlobalLocalization() { if(!window.confirm('Θα γίνει πρώτα το επίσημο AMCL global reset. Αν δεν βρεθεί στατική λύση LiDAR, το Dingo μπορεί να περιστραφεί αργά έως 45 δευτερόλεπτα. Η περιοχή είναι ελεύθερη;'))return;try{await api('api/navigation',jsonOptions({action:'global_localization',allow_motion:true}));showToast('Ξεκίνησε το AMCL global localization');await refreshNavigation();}catch(e){showToast(e.message);} }
+    async function stopNavigation() { try { await api('api/navigation',jsonOptions({action:'stop'}));showToast('Η αυτόνομη πλοήγηση σταμάτησε');await refreshNavigation();await refreshMapping(); } catch(e) { showToast(e.message); } }
+    async function cancelNavigation() { try { await api('api/navigation',jsonOptions({action:'cancel'}));showToast('Ο στόχος ακυρώνεται');await refreshNavigation(); } catch(e) { showToast(e.message); } }
+    $('startMapping').onclick=startMapping;$('stopMapping').onclick=stopMapping;$('saveMap').onclick=saveMap;$('navStart').onclick=startNavigation;$('navGlobal').onclick=startGlobalLocalization;$('navPose').onclick=setInitialPose;$('navStop').onclick=stopNavigation;$('navCancel').onclick=cancelNavigation;$('navMap').onchange=refreshNavigation;
+    function openDashboardView(view) { document.querySelector('.nav-btn[data-view="'+view+'"]')?.click(); }
+    $('mapRotate').onclick=rotateMap;
+    $('overviewMapRotate').onclick=rotateMap;
+    ['mapRotationRange','overviewMapRotationRange'].forEach(id=>{
+      const range=$(id);
+      range?.addEventListener('input',event=>setMapRotation(event.target.value));
+    });
+    updateMapRotationButtons();
+    $('overviewMapOpen').onclick=()=>openDashboardView('map');
+    $('overviewMapButton').onclick=()=>openDashboardView('map');
+    $('overviewAssistantButton').onclick=()=>openDashboardView('assistant');
+    $('overviewCameraButton').onclick=()=>openDashboardView('perception');
+    $('overviewRvizButton').onclick=()=>openDashboardView('rviz');
+
+    function drawLidar(scan) {
+      const c=$('lidarCanvas'),ctx=c.getContext('2d'),w=c.width,h=c.height,cx=w/2,cy=h/2,radius=Math.min(w,h)*.42,maxRange=scan&&scan.range_max?scan.range_max:8;
+      ctx.clearRect(0,0,w,h);ctx.fillStyle='#07111c';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#284158';ctx.lineWidth=1;
+      [0.25,0.5,0.75,1].forEach(r=>{ctx.beginPath();ctx.arc(cx,cy,radius*r,0,Math.PI*2);ctx.stroke();});
+      ctx.beginPath();ctx.moveTo(cx-radius,cy);ctx.lineTo(cx+radius,cy);ctx.moveTo(cx,cy-radius);ctx.lineTo(cx,cy+radius);ctx.stroke();
+      ctx.fillStyle='#91a5ba';ctx.font='12px system-ui';ctx.fillText(maxRange+' m',cx+radius-30,cy-7);ctx.fillText('μπροστά',cx-24,cy-radius-9);ctx.fillText('αριστερά',cx-radius-5,cy+18);
+      if(scan&&scan.points){scan.points.forEach(point=>{const x=cx+(point[0]/maxRange)*radius,y=cy-(point[1]/maxRange)*radius,d=Math.hypot(point[0],point[1]);ctx.fillStyle=d<.45?'#ff5964':d<1?'#ffc857':'#42d39a';ctx.fillRect(x-2,y-2,4,4);});}
+      ctx.fillStyle='#4c9cff';ctx.beginPath();ctx.moveTo(cx,cy-13);ctx.lineTo(cx-10,cy+10);ctx.lineTo(cx+10,cy+10);ctx.closePath();ctx.fill();ctx.fillStyle='#08121f';ctx.beginPath();ctx.moveTo(cx,cy-8);ctx.lineTo(cx-3,cy+4);ctx.lineTo(cx+3,cy+4);ctx.closePath();ctx.fill();
+      text('radarCount',scan?(scan.valid+' σημεία · '+scan.frame):'Αναμονή scan…');text('radarRange','εύρος '+maxRange+' m');
+    }
+
+    async function refreshCameraStatus() { try { const state=await api('api/camera/status');const external=state.available&&!state.process_running;cameraExpected=cameraExpected||state.process_running||state.available;setPill('cameraPill',state.available?'Κάμερα live':state.process_running?'Εκκίνηση…':'Δεν υπάρχει stream',state.available?'ok':state.process_running?'':'bad');$('cameraToggle').disabled=external;$('cameraToggle').textContent=state.process_running?'■ Τερματισμός κάμερας':external?'✓ Κάμερα από το stack':'▶ Ενεργοποίηση κάμερας';text('cameraTopic',state.topic||'/camera/camera/color/image_raw');if(state.available)cameraExpected=true;}catch(e){$('cameraToggle').disabled=false;setPill('cameraPill','Σφάλμα','bad');} }
+    async function refreshCameraImage() { if(!cameraExpected)return;const image=$('cameraImage');image.src=base+'api/camera.jpg?t='+Date.now(); }
+    $('cameraImage').onload=()=>{$('cameraEmpty').hidden=true;$('cameraImage').hidden=false;setPill('cameraPill','Κάμερα live','ok');};
+    $('cameraImage').onerror=()=>{$('cameraImage').hidden=true;$('cameraEmpty').hidden=false;};
+    $('cameraToggle').onclick=async()=>{try{const state=await api('api/camera/status');const action=state.process_running?'stop':'start';await api('api/camera/control',jsonOptions({action:action}));cameraExpected=action==='start';showToast(action==='start'?'Η κάμερα ξεκινά…':'Η κάμερα σταμάτησε');await refreshCameraStatus();}catch(e){showToast(e.message);}};
+
+    async function refreshSettings() { try { const settings=await api('api/settings');$('speedRange').value=Number(settings.max_linear_speed).toFixed(2);maxAngularSpeed=Number(settings.max_angular_speed)||0.8;updateSpeedLabel();text('angularLimit',maxAngularSpeed.toFixed(2)+' rad/s'); } catch(e) {} }
+    function updateSpeedLabel() { text('speedOutput',Number($('speedRange').value).toFixed(2)+' m/s'); }
+    async function saveSettings() { try { const settings=await api('api/settings',jsonOptions({max_linear_speed:Number($('speedRange').value)}));$('speedRange').value=Number(settings.max_linear_speed).toFixed(2);maxAngularSpeed=Number(settings.max_angular_speed)||0.8;updateSpeedLabel();text('angularLimit',maxAngularSpeed.toFixed(2)+' rad/s');showToast('Η μέγιστη ταχύτητα αποθηκεύτηκε'); } catch(e) { showToast(e.message); } }
+    function driveValues(button) { const speed=Number($('speedRange').value),turnScale=Math.min(1,speed/.25); return {linear:(Number(button.dataset.driveL)||0)*speed, angular:(Number(button.dataset.driveA)||0)*maxAngularSpeed*turnScale}; }
+    function sendDrive(values) { fetch(base+'api/drive',jsonOptions(values)).catch(()=>showToast('Δεν στάλθηκε η εντολή')); }
+    function beginDrive(button) { if(activeDrive)return; activeDrive=button;const send=()=>sendDrive(driveValues(button));send();driveTimer=setInterval(send,100); }
+    function endDrive() { if(!activeDrive)return;clearInterval(driveTimer);driveTimer=null;activeDrive=null;stopCommand(); }
+    document.querySelectorAll('[data-drive-l],[data-drive-a]').forEach(button=>{button.addEventListener('pointerdown',e=>{e.preventDefault();button.setPointerCapture?.(e.pointerId);beginDrive(button)});button.addEventListener('pointerup',endDrive);button.addEventListener('pointercancel',endDrive);button.addEventListener('pointerleave',()=>{if(activeDrive===button)endDrive()});});
+    function stopAllMotion(){endDrive();stopCommand();fetch(base+'api/follow',jsonOptions({action:'stop'})).catch(()=>{});}
+    $('topStop').onclick=()=>{stopAllMotion();showToast('STOP στάλθηκε');};$('driveStop').onclick=()=>{stopAllMotion();showToast('STOP στάλθηκε');};window.addEventListener('blur',endDrive);document.addEventListener('visibilitychange',()=>{if(document.hidden)endDrive()});
+    $('powerOffButton').onclick=async()=>{
+      if(!window.confirm('Να τερματιστεί τώρα το Mini PC; Θα κλείσουν το Dashboard, το Nav2 και όλα τα προγράμματα.'))return;
+      const button=$('powerOffButton');button.disabled=true;
+      try {
+        const result=await api('api/system',jsonOptions({action:'poweroff',confirmed:true}));
+        button.textContent='⏻ Τερματίζεται…';
+        showToast(result&&result.message?result.message:'Το Mini PC τερματίζεται…');
+      } catch(e) {
+        button.disabled=false;
+        showToast(e.message);
+      }
+    };
+    $('speedRange').oninput=updateSpeedLabel;$('speedRange').onchange=saveSettings;
+    document.querySelectorAll('.nav-btn').forEach(button=>button.onclick=()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b===button));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+button.dataset.view));if(button.dataset.view==='map'){refreshMap();refreshRooms();refreshMaps();refreshMapping();refreshNavigation();}if(button.dataset.view==='rviz'){refreshRviz();}if(button.dataset.view==='perception'){refreshCameraStatus();}if(button.dataset.view==='api'){refreshClearpathApi();}});
+    refreshState();refreshMap();refreshRooms();refreshMaps();refreshMapping();refreshNavigation();refreshRviz();refreshClearpathApi();refreshCameraStatus();refreshSettings();drawLidar(null);setInterval(refreshState,500);setInterval(refreshMap,2500);setInterval(refreshMapping,2000);setInterval(refreshNavigation,1000);setInterval(refreshRviz,2500);setInterval(refreshClearpathApi,5000);setInterval(refreshCameraStatus,2500);setInterval(refreshCameraImage,700);
+  </script>
+</body>
+</html>

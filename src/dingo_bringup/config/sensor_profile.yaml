@@ -1,0 +1,72 @@
+# Mounted sensor profile for this Clearpath Dingo-D DD100.
+#
+# Manufacturer dimensions are the sensor enclosure dimensions. They are not
+# the ROS TF origin: the scan plane and camera optical centre still need to be
+# measured from base_link on the actual mounting bracket.
+
+sensors:
+  lidar:
+    model: UTM-30LX-EW
+    manufacturer: Hokuyo
+    product_code: UUTM013
+    type: 2d_lidar
+    dimensions_mm: [62.0, 62.0, 87.5]
+    dimensions_order: [width, depth, height]
+    mass_g_without_cable: 210.0
+    scan_angle_deg: 270.0
+    angular_resolution_deg: 0.25
+    scan_period_ms: 25.0
+    guaranteed_range_m: 30.0
+    maximum_output_range_m: 60.0
+    interface: Ethernet 100BASE-TX
+    nominal_voltage_v: 12.0
+    ros:
+      raw_topic: /scan_raw
+      filtered_topic: /scan
+      frame: laser
+    mounting:
+      base_frame: base_link
+      # Physical installation calibration relative to base_link.  The
+      # horizontal reference is the Hokuyo optical axis / scan plane:
+      # 220 mm above the floor.  The Dingo base_link is approximately
+      # 14.5 mm above the floor from the wheel geometry, hence z=205.5 mm.
+      xyz_m: [0.2500, 0.0000, 0.2055]
+      rpy_rad: [0.000, 0.000, 0.000]
+      scan_plane_height_m: 0.220
+      base_link_offset_m: [0.2500, 0.0000, 0.2055]
+      calibration_status: measured_optical_axis
+      note: 220 mm measured from floor to the Hokuyo optical axis / scan plane; the TF origin is not the top of the enclosure.
+    official_source: https://www.hokuyo-aut.jp/search/single.php?serial=170
+
+  camera:
+    model: RealSense D455
+    manufacturer: Intel RealSense
+    type: rgbd_camera
+    dimensions_mm: [124.0, 29.0, 26.0]
+    dimensions_note: Manufacturer-listed enclosure dimensions; axis order depends on the bracket orientation.
+    depth_field_of_view_deg: [86.0, 57.0]
+    depth_working_range_m: [0.6, 6.0]
+    ros:
+      color_topic: /camera/camera/color/image_raw
+      depth_topic: /camera/camera/depth/image_rect_raw
+      pointcloud_topic: /camera/camera/depth/color/points
+      color_profile: 640x480x15
+      depth_profile: 640x480x15
+      infra_streams: disabled_for_usb_stability
+      camera_link_frame: camera_link
+      color_optical_frame: camera_color_optical_frame
+    mounting:
+      base_frame: base_link
+      # The STL scan was aligned with the front of the Dingo identified as
+      # the LiDAR/camera mast. It places the D455 on the same forward offset
+      # as the LiDAR, rather than directly above the base_link origin. The
+      # D455 driver supplies the internal camera_link -> optical-frame TF.
+      xyz_m: [0.250, 0.000, 0.425]
+      rpy_rad: [0.000, 0.000, 0.000]
+      optical_center_offset_m: [0.250, 0.000, 0.425]
+      pitch_deg: 0.0
+      yaw_deg: 0.0
+      roll_deg: 0.0
+      calibration_status: provisional_from_stl
+      note: STL-based placement; front direction confirmed by the user. Refine the optical-centre height and bracket orientation after a live TF check.
+    official_source: https://www.intel.com/content/www/us/en/products/sku/205847/intel-realsense-depth-camera-d455/specifications.html

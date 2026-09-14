@@ -1,0 +1,21 @@
+[Unit]
+Description=Clearpath Dingo voice assistant with Whisper large-v3-turbo on AMD GPU Vulkan
+Wants=network-online.target dingo-dashboard.service dingo-sensors.service dingo-local-llm.service
+After=network-online.target dingo-dashboard.service dingo-sensors.service dingo-local-llm.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dimi/dingo_ws
+Environment=HOME=/home/dimi
+Environment=PYTHONUNBUFFERED=1
+Environment=ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+Environment=RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+ExecStart=/bin/bash -lc '. /opt/ros/jazzy/setup.bash && . /home/dimi/dingo_ws/install/setup.bash && exec /usr/bin/python3 /home/dimi/dingo_ws/install/dingo_bringup/lib/dingo_voice_assistant.py --ros-args -p microphone_name:=ReSpeaker -p microphone_backend:=alsa -p microphone_channels:=6 -p microphone_channel:=0 -p wake_channel:=0 -p stt_channel:=0 -p microphone_auto_fallback:=false -p microphone_gain:=2.0 -p vad_threshold:=0.030 -p vad_start_blocks:=4 -p wake_fallback_stt:=false -p wake_fallback_cooldown_s:=2.5 -p wake_model_name:=Alexa -p wake_words:=alexa,αλεξα,αλεχα -p wake_model_path:=/home/dimi/dingo_ws/models/wake_words/alexa.onnx -p wake_model_vad_threshold:=0.0 -p wake_threshold:=0.50 -p wake_highpass_hz:=0.0 -p wake_confirmation_hits:=2 -p wake_confirmation_window_s:=0.8 -p llm_provider:=flm -p llm_url:=http://127.0.0.1:52625/v1/chat/completions -p llm_model:=qwen3.5:9b -p llm_timeout_s:=90.0 -p native_tool_calling:=false -p stt_backend:=vulkan -p stt_model:=large-v3-turbo -p stt_fallback_model:=large-v3-turbo -p vulkan_whisper_cli:=/home/dimi/.local/share/dingo-whisper-vulkan/bin/whisper-cli -p vulkan_model_path:=/home/dimi/.cache/dingo/whisper-vulkan/ggml-large-v3-turbo.bin -p vulkan_threads:=8 -p vulkan_beam_size:=5 -p vulkan_timeout_s:=60.0 -p tts_backend:=edge -p tts_edge_voice:=el-GR-AthinaNeural'
+KillMode=control-group
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

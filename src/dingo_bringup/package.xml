@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>dingo_bringup</name>
+  <version>0.1.0</version>
+  <description>Clean Clearpath Dingo-D DD100 bringup, navigation and dashboard.</description>
+  <maintainer email="dimi@example.com">dimi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclpy</depend>
+  <depend>ament_index_python</depend>
+  <depend>clearpath_platform_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>action_msgs</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>clearpath_nav2_demos</exec_depend>
+  <exec_depend>foxglove_msgs</exec_depend>
+  <exec_depend>clearpath_robot</exec_depend>
+  <exec_depend>urg_node</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>joy</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>teleop_twist_joy</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <export><build_type>ament_cmake</build_type></export>
+</package>

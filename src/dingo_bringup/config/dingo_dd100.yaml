@@ -1,0 +1,26 @@
+# Clearpath Dingo-D DD100 physical reference data.
+# Dimensions are L x W x H.  The footprint is deliberately conservative.
+dingo:
+  model: DD100
+  namespace: dd100_10000002
+  drive: differential
+  dimensions_m: [0.551, 0.517, 0.110]
+  ground_clearance_m: 0.014
+  mass_kg: 12.0
+  max_payload_kg: 20.0
+  max_speed_mps: 1.3
+  footprint:
+    length_m: 0.551
+    width_m: 0.517
+  frames:
+    base: base_link
+    odom: odom
+    map: map
+  topics:
+    cmd_vel: /dd100_10000002/cmd_vel
+    odom: /dd100_10000002/platform/odom
+    battery: /dd100_10000002/platform/bms/state
+    emergency_stop: /dd100_10000002/platform/emergency_stop
+    safety_stop: /dd100_10000002/platform/safety_stop
+    scan: /scan
+    map: /dd100_10000002/map

@@ -1,0 +1,26 @@
+build/
+install/
+log/
+.venv/
+.venvs/
+**/__pycache__/
+**/.pytest_cache/
+*.pyc
+
+# Local recordings and generated diagnostics (not source code)
+*.wav
+*.log
+Ogre.log
+frames_*.gv
+frames_*.pdf
+dingo-sensor-distances.html
+dingo-sensor-distances.png
+original-*-signature.txt
+
+# Derived wake-word training data; keep the reusable training scripts only.
+training/wake_word_dingo/raw/
+training/wake_word_dingo/raw_*/
+training/wake_word_dingo/wav/
+training/wake_word_dingo/wav_*/
+training/wake_word_dingo/real_wav/
+training/wake_word_dingo/*.npz

@@ -1,0 +1,21 @@
+[Unit]
+Description=Dingo ReSpeaker XVF3800 direction and microphone status
+Wants=network-online.target dingo-dashboard.service dingo-voice.service
+After=network-online.target dingo-dashboard.service dingo-voice.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dimi/dingo_ws
+Environment=HOME=/home/dimi
+Environment=PYTHONUNBUFFERED=1
+Environment=ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+Environment=RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+ExecStart=/bin/bash -lc '. /opt/ros/jazzy/setup.bash && . /home/dimi/dingo_ws/install/setup.bash && exec /usr/bin/python3 /home/dimi/dingo_ws/install/dingo_bringup/lib/dingo_bringup/dingo_mic_array.py --ros-args -p robot_namespace:=dd100_10000002 -p led_enabled:=true -p direction_enabled:=true'
+KillMode=control-group
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
