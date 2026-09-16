@@ -32,7 +32,11 @@ amcl:
     save_pose_rate: 0.5
     sigma_hit: 0.2
     tf_broadcast: true
-    transform_tolerance: 1.0
+    # AMCL's map->odom TF is future-dated by transform_tolerance.  A full
+    # second made AMCL and the Nav2 costmaps drop scans as "earlier than all
+    # data in the transform cache" on this host.  Keep it near the
+    # sensor/update period instead.
+    transform_tolerance: 0.25
     update_min_a: 0.05
     update_min_d: 0.05
     z_hit: 0.5

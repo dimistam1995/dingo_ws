@@ -98,8 +98,19 @@ HTML = (Path(get_package_share_directory('dingo_bringup')) / 'web' / 'index.html
     encoding='utf-8'
 )
 
+# Temporary browser-playable sample generated while evaluating the local
+# Supertonic female voice.  It is served only through the Dashboard route
+# below; the active robot speaker/TTS configuration is unchanged.
+SUPERTONIC_TEST_AUDIO = Path(
+    '/tmp/dingo-supertonic-test/supertonic-female-f1.wav'
+)
+SUPERTONIC_TEST_AUDIO_MP3 = Path(
+    '/tmp/dingo-supertonic-test/supertonic-female-f1.mp3'
+)
+
 
 class DashboardNode(Node):
+    ASSISTANT_REPLY_MAX_CHARS = 4000
     DEFAULT_SETTINGS = {
         'max_linear_speed': 0.12,
         'max_angular_speed': 0.8,
@@ -370,6 +381,17 @@ class DashboardNode(Node):
                 str(Path.home() / '.config' / 'dingo_dashboard' / 'settings.json'),
             ).value
         ).expanduser()
+        self.localization_pose_file = Path(
+            self.declare_parameter(
+                'localization_pose_file',
+                str(
+                    Path.home()
+                    / '.config'
+                    / 'dingo_dashboard'
+                    / 'last_localization.json'
+                ),
+            ).value
+        ).expanduser()
         self.wake_training_dir = Path(
             self.declare_parameter(
                 'wake_training_dir',
@@ -410,12 +432,11 @@ class DashboardNode(Node):
         ).expanduser()
         gemini_usage = self.load_gemini_usage()
         prefix = f'/{self.robot_namespace}' if self.robot_namespace else ''
-        # Clearpath's BT joystick watchdog normally owns a very high-priority
-        # twist_mux lock. A DualSense can remain Bluetooth-connected while
-        # asleep, which makes that watchdog report 0% quality and silently
-        # block every Nav2 command. Dashboard-owned autonomous actions use a
-        # separate fail-closed gate; the physical E-stop and safety locks
-        # remain at their normal priorities (255 and 254).
+        # Clearpath's BT joystick watchdog reports link quality separately.
+        # Dashboard-owned autonomous actions use a separate fail-closed gate:
+        # it is open for normal PS5 teleop and closes only while an autonomous
+        # goal is active.  The physical E-stop and safety locks remain at
+        # their normal priorities (255 and 254).
         self.autonomous_navigation_bypass_bt_quality = bool(
             self.declare_parameter(
                 'autonomous_navigation_bypass_bt_quality', True
@@ -427,9 +448,9 @@ class DashboardNode(Node):
                 255,
                 int(
                     self.declare_parameter(
-                        'bt_quality_normal_priority', 253
+                        'bt_quality_normal_priority', 252
                     ).value
-                    or 253
+                    or 252
                 ),
             ),
         )
@@ -446,7 +467,7 @@ class DashboardNode(Node):
         self.process_lock = threading.Lock()
         self.autonomous_navigation_lock = threading.Lock()
         self.autonomous_navigation_active = False
-        self.autonomous_navigation_gate_locked = True
+        self.autonomous_navigation_gate_locked = False
         self.autonomous_navigation_priority = self.bt_quality_normal_priority
         self.autonomous_navigation_last_error = None
         self.autonomous_navigation_last_change_at = 0.0
@@ -685,6 +706,8 @@ class DashboardNode(Node):
         self.navigation_map = None
         self.navigation_initial_pose = None
         self.navigation_initial_pose_sent_at = 0.0
+        self.navigation_initial_pose_source = None
+        self.navigation_saved_pose = None
         # Initial pose is only a DDS delivery aid.  Once AMCL has accepted
         # it, stop replaying it so a moving robot is tracked by AMCL's
         # map->odom transform instead of being pulled back to the seed pose.
@@ -701,6 +724,13 @@ class DashboardNode(Node):
         self.navigation_path_status = 'idle'
         self.navigation_path_error = None
         self.navigation_path_request_id = 0
+        # A goal is planned before it is handed to NavigateToPose.  This keeps
+        # a bad/blocked map target from enabling autonomous motion and then
+        # leaving the robot apparently stuck with no valid path.
+        self.navigation_pending_goal = None
+        self.navigation_preflight_request_id = None
+        self.navigation_dispatch_request_id = None
+        self.navigation_cancel_requested = False
         self.spin_goal_handle = None
         self.spin_result_future = None
         self.spin_status = 'idle'
@@ -785,13 +815,45 @@ class DashboardNode(Node):
         # are enough to confirm that hypothesis without making the user wait
         # for the full global-search settling window.
         self.localization_scan_match_good_required = 3
+        # A confirmed pose from the previous run is used as a fast, stationary
+        # startup seed.  It is never trusted immediately: AMCL must publish a
+        # few low-covariance updates first.  If the seed is stale or cannot be
+        # confirmed, the normal official global-localization fallback runs.
+        self.localization_saved_pose_timeout_s = max(
+            5.0,
+            min(
+                30.0,
+                float(
+                    self.declare_parameter(
+                        'localization_saved_pose_timeout_s', 10.0
+                    ).value
+                    or 10.0
+                ),
+            ),
+        )
+        self.localization_pose_max_age_s = max(
+            3600.0,
+            min(
+                90.0 * 86400.0,
+                float(
+                    self.declare_parameter(
+                        'localization_pose_max_age_s', 30.0 * 86400.0
+                    ).value
+                    or 30.0 * 86400.0
+                ),
+            ),
+        )
         self.localization_last_pose = None
         self.localization_global_service_response = False
         self.localization_last_global_reset = False
         self.localization_scan_match_attempted = False
         self.localization_allow_motion = False
         self.localization_method = None
-        self.localization_fallback_after_s = 5.0
+        # Do not leave AMCL's random cloud visible for five seconds before the
+        # stationary LiDAR fallback is allowed to help.  The official global
+        # reset is still the fallback, but a strong scan hypothesis is seeded
+        # almost immediately after its acknowledgement.
+        self.localization_fallback_after_s = 1.0
         # The fallback matcher may need a few seconds on the small computer;
         # leave enough time for AMCL to accept its seed before declaring a
         # failed search.
@@ -2365,7 +2427,7 @@ class DashboardNode(Node):
             return
         if not isinstance(payload, dict):
             return
-        text = str(payload.get('text', '') or '')[:500]
+        text = str(payload.get('text', '') or '')[:self.ASSISTANT_REPLY_MAX_CHARS]
         with self.lock:
             current = dict(self.state.get('voice') or {})
             current['last_reply'] = text
@@ -3036,7 +3098,8 @@ class DashboardNode(Node):
                 elif operation in {'start', 'global_localization'}:
                     changed = self.start_global_localization(allow_motion=False)
                     reply = (
-                        'Ξεκίνησε επίσημο AMCL global localization χωρίς περιστροφή του ρομπότ.'
+                        'Ξεκίνησε γρήγορη στατική εύρεση θέσης με LiDAR· '
+                        'το επίσημο AMCL global search μένει ως fallback.'
                         if changed else 'Το localization είναι ήδη σε εξέλιξη.'
                     )
                 else:
@@ -3470,6 +3533,8 @@ class DashboardNode(Node):
             if self.navigation_initial_pose is not None and not searching:
                 self.navigation_initial_pose = None
                 self.navigation_initial_pose_sent_at = 0.0
+                if self.navigation_initial_pose_source == 'saved_pose':
+                    self.navigation_initial_pose_source = None
             self.navigation_amcl_pose = pose
             self.navigation_amcl_covariance = covariance
             self.navigation_amcl_received_at = time.monotonic()
@@ -3501,7 +3566,11 @@ class DashboardNode(Node):
                     self.localization_good_count = 0
                     self.localization_last_pose = None
                 required_good = self.localization_good_required
-                if self.localization_method == 'scan_match_fallback':
+                if self.localization_method in (
+                    'scan_match_fast',
+                    'scan_match_fallback',
+                    'saved_pose',
+                ):
                     required_good = min(
                         required_good,
                         self.localization_scan_match_good_required,
@@ -3578,12 +3647,22 @@ class DashboardNode(Node):
         ):
             return False
 
-        # DD100 footprint: 0.551 m x 0.517 m.  Do not add a second artificial
-        # margin here: the map is 5 cm/cell and Nav2's costmap/inflation layer
-        # performs the actual obstacle clearance check.  An extra 2.5 cm
-        # margin caused valid AMCL poses to be rejected due to cell rounding.
-        half_length = 0.551 / 2.0 + float(padding_m)
-        half_width = 0.517 / 2.0 + float(padding_m)
+        # DD100 footprint: 0.551 m x 0.517 m.  OccupancyGrid has 5 cm cells,
+        # so a point exactly on the outer edge can land in the neighbouring
+        # occupied cell after AMCL rounds the pose.  Ignore at most 1.5 map
+        # cells at that outer edge; the live AMCL estimate can move by a few
+        # centimetres while the Dingo is stationary.  Nav2's costmap,
+        # collision monitor and planner remain the authoritative full-
+        # footprint safety checks before any wheel command is allowed.
+        cell_edge_tolerance = min(resolution * 1.5, 0.075)
+        half_length = max(
+            resolution,
+            0.551 / 2.0 + float(padding_m) - cell_edge_tolerance,
+        )
+        half_width = max(
+            resolution,
+            0.517 / 2.0 + float(padding_m) - cell_edge_tolerance,
+        )
         step = max(resolution / 2.0, 0.025)
         sample_count_x = int(math.ceil((2.0 * half_length) / step))
         sample_count_y = int(math.ceil((2.0 * half_width) / step))
@@ -3603,6 +3682,61 @@ class DashboardNode(Node):
                 if value < 0 or value >= 65:
                     return False
         return True
+
+    def map_pose_center_is_free(self, pose):
+        """Check the map cell containing the AMCL base center."""
+        if not pose:
+            return False
+        try:
+            x = float(pose['x'])
+            y = float(pose['y'])
+        except (KeyError, TypeError, ValueError):
+            return False
+        with self.lock:
+            map_state = self.map_state
+        if not map_state:
+            return False
+        try:
+            width = int(map_state['width'])
+            height = int(map_state['height'])
+            resolution = float(map_state['resolution'])
+            origin = map_state['origin']
+            origin_x = float(origin['x'])
+            origin_y = float(origin['y'])
+            data = map_state['data']
+            cell_x = int(math.floor((x - origin_x) / resolution))
+            cell_y = int(math.floor((y - origin_y) / resolution))
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            return False
+        if not (0 <= cell_x < width and 0 <= cell_y < height):
+            return False
+        try:
+            return int(data[cell_y * width + cell_x]) == 0
+        except (IndexError, TypeError, ValueError):
+            return False
+
+    def localization_pose_is_trusted(self, pose, covariance):
+        """Return whether a confirmed AMCL pose may drive Dashboard state.
+
+        The full footprint test is intentionally kept for candidate validation
+        and Nav2 preflight.  Once AMCL has already been confirmed by LiDAR,
+        however, a one-cell corner overlap is map quantization/noise rather
+        than evidence that the robot was kidnapped.  Requiring the base center
+        to remain in a known free cell prevents the watchdog feedback loop
+        without allowing an obviously invalid map hypothesis through.
+        """
+        if not self.amcl_pose_is_good(covariance):
+            return False
+        if self.lookup_transform('map', 'base_link') is None:
+            return False
+        if self.map_pose_is_safe(pose):
+            return True
+        with self.lock:
+            confirmed = bool(
+                self.navigation_pose_initialized
+                and self.localization_method in ('amcl_global', 'amcl_scan_match')
+            )
+        return confirmed and self.map_pose_center_is_free(pose)
 
     def scan(self, msg):
         max_display_range = min(
@@ -3930,9 +4064,7 @@ class DashboardNode(Node):
             mapping_running
             or (
                 pose_initialized
-                and self.amcl_pose_is_good(covariance)
-                and self.map_pose_is_safe(amcl_pose)
-                and self.lookup_transform('map', 'base_link') is not None
+                and self.localization_pose_is_trusted(amcl_pose, covariance)
             )
         )
         # Keep the current TF available for diagnostics, but do not project a
@@ -4445,6 +4577,95 @@ class DashboardNode(Node):
         )
         temporary.replace(self.settings_file)
 
+    def load_last_localization(self, map_name):
+        """Load the last AMCL-confirmed pose for the selected map.
+
+        This is deliberately a small, local cache rather than a claim that a
+        pose is still valid forever.  The map name and an expiry limit must
+        match; AMCL still has to confirm the seed before navigation is
+        enabled.  Corrupt, partial, or old files are ignored safely.
+        """
+        expected_map = str(map_name or '').strip()
+        if not expected_map:
+            return None
+        try:
+            stored = json.loads(
+                self.localization_pose_file.read_text(encoding='utf-8')
+            )
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(stored, dict):
+            return None
+        if str(stored.get('map') or '').strip() != expected_map:
+            return None
+        try:
+            saved_at = float(stored.get('saved_at'))
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(saved_at):
+            return None
+        age = time.time() - saved_at
+        if age < -300.0 or age > self.localization_pose_max_age_s:
+            return None
+        raw_pose = stored.get('pose')
+        if not isinstance(raw_pose, dict):
+            return None
+        try:
+            x = float(raw_pose['x'])
+            y = float(raw_pose['y'])
+            yaw = float(raw_pose.get('yaw', 0.0))
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not all(math.isfinite(value) for value in (x, y, yaw)):
+            return None
+        return {
+            'x': round(x, 3),
+            'y': round(y, 3),
+            'yaw': round(yaw, 4),
+            'frame': 'map',
+            'saved_at': round(saved_at, 3),
+        }
+
+    def save_last_localization(self, map_name, pose):
+        """Persist a validated AMCL pose for the next Nav2 startup."""
+        expected_map = str(map_name or '').strip()
+        if not expected_map or not isinstance(pose, dict):
+            return False
+        try:
+            x = float(pose['x'])
+            y = float(pose['y'])
+            yaw = float(pose.get('yaw', 0.0))
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not all(math.isfinite(value) for value in (x, y, yaw)):
+            return False
+        payload = {
+            'map': expected_map,
+            'pose': {
+                'x': round(x, 3),
+                'y': round(y, 3),
+                'yaw': round(yaw, 4),
+                'frame': 'map',
+            },
+            'saved_at': time.time(),
+        }
+        try:
+            self.localization_pose_file.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.localization_pose_file.with_name(
+                self.localization_pose_file.name + '.tmp'
+            )
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding='utf-8',
+            )
+            temporary.replace(self.localization_pose_file)
+        except OSError as exc:
+            self.get_logger().warning(
+                f'Could not save last localization pose: {exc}'
+            )
+            return False
+        return True
+
     def settings_snapshot(self):
         with self.lock:
             return dict(self.settings)
@@ -4518,21 +4739,23 @@ class DashboardNode(Node):
         return [ros2, *args]
 
     def set_autonomous_navigation_mode(self, active, force=False):
-        """Open or close the fail-closed Dashboard BT-quality gate.
+        """Open or close the fail-closed Dashboard autonomous gate.
 
         Clearpath's ``twist_mux`` keeps its lock priorities internally and
         does not apply a runtime priority parameter update.  The platform
         config therefore listens to ``bt_quality_stop_gate`` instead of the
-        raw watchdog topic.  The Dashboard publishes ``True`` while idle and
-        at 10 Hz, and only publishes ``False`` for an explicitly requested
-        autonomous action.  The mux's 0.5 s timeout locks it again if this
-        process disappears.  E-stop and safety-stop locks are untouched.
+        raw watchdog topic.  The Dashboard publishes ``False`` while idle so
+        the PS5 teleop input remains usable, and ``True`` only for an
+        explicitly requested autonomous action.  Nav2's external input has
+        priority 253, above this gate at priority 252, while the physical
+        E-stop and safety-stop locks remain higher.  The mux's 0.5 s timeout locks it
+        again if this process disappears.
         """
         active = bool(active)
         if not self.autonomous_navigation_bypass_bt_quality:
             with self.lock:
                 self.autonomous_navigation_active = False
-                self.autonomous_navigation_gate_locked = True
+                self.autonomous_navigation_gate_locked = False
                 self.autonomous_navigation_priority = self.bt_quality_normal_priority
                 self.autonomous_navigation_last_error = None
                 self.autonomous_navigation_restore_pending = False
@@ -4547,7 +4770,7 @@ class DashboardNode(Node):
             if (
                 not force
                 and current_active == active
-                and current_gate_locked == (not active)
+                and current_gate_locked == active
                 and current_error is None
             ):
                 return True
@@ -4570,7 +4793,7 @@ class DashboardNode(Node):
                 # Never claim that autonomous mode is active unless the gate
                 # was actually published to a discovered twist_mux.
                 self.autonomous_navigation_active = active if success else False
-                self.autonomous_navigation_gate_locked = not active if success else True
+                self.autonomous_navigation_gate_locked = active if success else False
                 self.autonomous_navigation_priority = (
                     self.bt_quality_normal_priority if success else None
                 )
@@ -4584,7 +4807,7 @@ class DashboardNode(Node):
             if success:
                 self.get_logger().info(
                     'Dashboard BT-quality gate set to '
-                    f'{"released" if active else "locked"} '
+                    f'{"locked for autonomous mode" if active else "released for PS5 teleop"} '
                     f'({self.bt_quality_gate_topic})'
                 )
             else:
@@ -4602,9 +4825,10 @@ class DashboardNode(Node):
             with self.lock:
                 active = self.autonomous_navigation_active
         message = Bool()
-        message.data = not (
-            bool(active) and self.autonomous_navigation_bypass_bt_quality
-        )
+        # False leaves the PS5 teleop input available. True masks the lower
+        # priority joystick while Nav2's external input (priority 253) may
+        # continue; physical E-stop/safety locks have higher priorities.
+        message.data = bool(active) and self.autonomous_navigation_bypass_bt_quality
         try:
             self.bt_quality_gate_pub.publish(message)
         except (AttributeError, RuntimeError) as exc:
@@ -4844,6 +5068,11 @@ class DashboardNode(Node):
         # safe initial pose for a newly selected map. Only carry a pose across
         # when we are switching directly from the currently running SLAM map.
         initial_pose = self.lookup_transform('map', 'base_link') if mapping_running else None
+        saved_pose = (
+            None
+            if initial_pose is not None
+            else self.load_last_localization(map_file.stem)
+        )
         if mapping_running:
             self.stop_mapping()
         started = self.start_process(
@@ -4858,12 +5087,20 @@ class DashboardNode(Node):
         )
         if started:
             with self.lock:
+                # Do not validate a saved pose against a transient map from a
+                # previous Nav2 session.  Wait for map_server to publish the
+                # selected map before the automatic seed is considered.
+                self.map_state = None
                 self.navigation_map = map_file.stem
                 self.navigation_status = 'starting'
                 self.navigation_goal_handle = None
                 self.navigation_result_future = None
                 self.navigation_initial_pose = initial_pose
                 self.navigation_initial_pose_sent_at = 0.0
+                self.navigation_initial_pose_source = (
+                    'mapping' if initial_pose is not None else None
+                )
+                self.navigation_saved_pose = saved_pose
                 self.navigation_pose_initialized = bool(initial_pose)
                 self.navigation_amcl_pose = None
                 self.navigation_amcl_covariance = None
@@ -4898,12 +5135,27 @@ class DashboardNode(Node):
                 self.localization_method = None
                 self.navigation_goal = None
                 self.navigation_feedback = None
+                self.navigation_pending_goal = None
+                self.navigation_preflight_request_id = None
+                self.navigation_dispatch_request_id = None
+                self.navigation_cancel_requested = False
+                self.navigation_path_request_id += 1
+                self.navigation_path_goal_handle = None
+                self.navigation_path_result_future = None
+                self.navigation_path = None
+                self.navigation_path_status = 'idle'
+                self.navigation_path_error = None
                 self.auto_localize_attempted = False
                 self.auto_localize_retry_at = 0.0
                 self.auto_localize_last_log_at = 0.0
                 self.auto_localize_retry_count = 0
                 self.localization_watchdog_invalid_since = 0.0
                 self.localization_watchdog_last_reset_at = 0.0
+            if saved_pose is not None:
+                self.get_logger().info(
+                    'Loaded the last confirmed AMCL pose; it will be checked '
+                    'before automatic localization'
+                )
         return started
 
     def auto_start_navigation_tick(self):
@@ -5159,6 +5411,50 @@ class DashboardNode(Node):
         # and AMCL are already active; do not block automatic AMCL startup on
         # the navigation action lifecycle.
         with self.lock:
+            searching = (
+                self.localization_search_active
+                or self.localization_scan_match_active
+            )
+            auto_attempted = self.auto_localize_attempted
+            pose_initialized = self.navigation_pose_initialized
+            initial_pose_present = self.navigation_initial_pose is not None
+            saved_pose = (
+                dict(self.navigation_saved_pose)
+                if self.navigation_saved_pose
+                else None
+            )
+            inputs_ready = bool(self.map_state and self.state.get('scan'))
+        if not inputs_ready:
+            return
+        now = time.monotonic()
+        if now < self.auto_localize_retry_at:
+            return
+
+        # Prefer the last confirmed pose for an immediate, stationary startup
+        # localization.  It is provisional until AMCL produces stable updates;
+        # a failed confirmation clears it and falls through to the official
+        # map-wide global-localization retry below.
+        if (
+            saved_pose is not None
+            and not auto_attempted
+            and not searching
+            and not pose_initialized
+            and not initial_pose_present
+        ):
+            try:
+                started = self.start_saved_pose_confirmation(saved_pose)
+            except RuntimeError as exc:
+                self.get_logger().debug(
+                    f'Saved-pose localization could not start: {exc}'
+                )
+                started = False
+            if started:
+                self.auto_localize_attempted = True
+                return
+            with self.lock:
+                self.navigation_saved_pose = None
+
+        with self.lock:
             if (
                 self.auto_localize_attempted
                 or self.localization_search_active
@@ -5167,12 +5463,6 @@ class DashboardNode(Node):
                 or self.navigation_initial_pose is not None
             ):
                 return
-            inputs_ready = bool(self.map_state and self.state.get('scan'))
-        if not inputs_ready:
-            return
-        now = time.monotonic()
-        if now < self.auto_localize_retry_at:
-            return
         try:
             # Boot localization must never command a rotation by itself.  It
             # uses AMCL global reset and stationary LiDAR matching first.
@@ -5260,9 +5550,7 @@ class DashboardNode(Node):
             return
 
         pose_valid = bool(
-            self.amcl_pose_is_good(covariance)
-            and self.map_pose_is_safe(pose)
-            and self.lookup_transform('map', 'base_link') is not None
+            self.localization_pose_is_trusted(pose, covariance)
         )
         now = time.monotonic()
         if pose_valid:
@@ -5287,9 +5575,17 @@ class DashboardNode(Node):
             )
             return
         if started:
-            self.get_logger().warning(
-                'AMCL pose left the current map; automatic global re-localization started'
-            )
+            with self.lock:
+                method = self.localization_method
+            if method == 'amcl_global':
+                self.get_logger().warning(
+                    'AMCL pose left the current map; official global '
+                    're-localization started'
+                )
+            else:
+                self.get_logger().info(
+                    'AMCL pose was corrected by the fast stationary LiDAR match'
+                )
 
     def publish_initial_pose(self):
         with self.lock:
@@ -5306,6 +5602,7 @@ class DashboardNode(Node):
             with self.lock:
                 self.navigation_initial_pose = None
                 self.navigation_initial_pose_sent_at = 0.0
+                self.navigation_initial_pose_source = None
             return
         msg = PoseWithCovarianceStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -5360,31 +5657,41 @@ class DashboardNode(Node):
             self.localization_scan_match_attempted = False
             self.localization_allow_motion = False
             self.localization_method = 'manual_initial_pose'
-            self.navigation_initial_pose = {
+            candidate = {
                 'x': round(x, 3),
                 'y': round(y, 3),
                 'yaw': round(yaw, 4),
                 'frame': 'map',
             }
+            self.navigation_initial_pose = candidate
             self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = 'manual_initial_pose'
+            self.navigation_saved_pose = None
             self.navigation_goal = None
             self.navigation_feedback = None
             self.navigation_pose_initialized = True
             self.navigation_status = 'ready'
         self.publish_initial_pose()
+        with self.lock:
+            map_name = self.navigation_map
+        if map_name and self.map_pose_is_safe(candidate):
+            self.save_last_localization(map_name, candidate)
         return True
 
     @staticmethod
     def _angle_difference(first, second):
         return math.atan2(math.sin(first - second), math.cos(first - second))
 
-    def _scan_match_pose(self):
+    def _scan_match_pose(self, prior=None, verify_only=False):
         """Find a good map pose from the current 2D scan, without moving Dingo.
 
-        This is deliberately a conservative helper for the Dashboard's global
-        localization button.  AMCL remains the estimator and the official
-        Clearpath/Nav2 parameters remain unchanged; this matcher only supplies
-        an initial pose when the static map has a strong geometric candidate.
+        When ``prior`` is available, search only a local window around that
+        last confirmed pose.  ``verify_only`` scores that exact prior and
+        returns immediately when the live scan agrees, which is the usual
+        same-place path.  A call without a prior keeps the full map-wide
+        search as the last-resort fallback.  AMCL remains the estimator and
+        this matcher only supplies an initial hypothesis when the static map
+        has a strong geometric candidate.
         """
         if np is None or distance_transform_edt is None:
             return None
@@ -5434,13 +5741,66 @@ class DashboardNode(Node):
         if len(base_points) < 80:
             return None
 
-        # Evenly reduce the scan for the global pass, then use all usable
-        # points in the local refinement.  This keeps a phone request fast.
+        # Evenly reduce the scan for the coarse pass, then use all usable
+        # points in the local refinement.  A prior changes only the coarse
+        # window; the scoring and final safety gates stay identical.
         global_points = base_points[::max(1, math.ceil(len(base_points) / 180))]
         occupied = grid >= 65
         distance_map = distance_transform_edt(~occupied).astype(np.float32) * resolution
-        map_xs = origin_x + (np.arange(0, width, 3, dtype=np.float32) + 0.5) * resolution
-        map_ys = origin_y + (np.arange(0, height, 3, dtype=np.float32) + 0.5) * resolution
+        prior_pose = None
+        if isinstance(prior, dict):
+            try:
+                prior_pose = (
+                    float(prior['x']),
+                    float(prior['y']),
+                    float(prior.get('yaw', 0.0)),
+                )
+            except (KeyError, TypeError, ValueError):
+                prior_pose = None
+            if prior_pose and not all(math.isfinite(value) for value in prior_pose):
+                prior_pose = None
+
+        if prior_pose is None:
+            x_indices = np.arange(0, width, 3, dtype=np.int32)
+            y_indices = np.arange(0, height, 3, dtype=np.int32)
+            coarse_yaws = [
+                math.radians(yaw_degrees)
+                for yaw_degrees in range(-180, 180, 10)
+            ]
+        else:
+            # A saved pose is refreshed after every confirmed goal, so a
+            # one-metre window catches ordinary odometry/map drift while still
+            # being much cheaper and less ambiguous than scanning the whole
+            # apartment.  If the robot was carried farther away, the global
+            # fallback below is used.
+            prior_x, prior_y, prior_yaw = prior_pose
+            local_radius = 1.0
+            x_start = max(
+                0,
+                int(math.floor((prior_x - local_radius - origin_x) / resolution)),
+            )
+            x_stop = min(
+                width - 1,
+                int(math.ceil((prior_x + local_radius - origin_x) / resolution)),
+            )
+            y_start = max(
+                0,
+                int(math.floor((prior_y - local_radius - origin_y) / resolution)),
+            )
+            y_stop = min(
+                height - 1,
+                int(math.ceil((prior_y + local_radius - origin_y) / resolution)),
+            )
+            if x_start > x_stop or y_start > y_stop:
+                return None
+            x_indices = np.arange(x_start, x_stop + 1, 2, dtype=np.int32)
+            y_indices = np.arange(y_start, y_stop + 1, 2, dtype=np.int32)
+            coarse_yaws = [
+                prior_yaw + math.radians(yaw_degrees)
+                for yaw_degrees in range(-35, 36, 5)
+            ]
+        map_xs = origin_x + (x_indices.astype(np.float32) + 0.5) * resolution
+        map_ys = origin_y + (y_indices.astype(np.float32) + 0.5) * resolution
 
         footprint_half_length = 0.551 / 2.0
         footprint_half_width = 0.517 / 2.0
@@ -5505,17 +5865,41 @@ class DashboardNode(Node):
                 float(np.mean(valid)),
             )
 
+        if verify_only and prior_pose is not None:
+            prior_x, prior_y, prior_yaw = prior_pose
+            score, mean_distance, close_12, close_25, valid_fraction = scalar_score(
+                prior_x, prior_y, prior_yaw, base_points
+            )
+            prior_candidate = {
+                'x': round(prior_x, 3),
+                'y': round(prior_y, 3),
+                'yaw': round(
+                    math.atan2(math.sin(prior_yaw), math.cos(prior_yaw)),
+                    4,
+                ),
+                'score': round(score, 4),
+                'mean_distance': round(mean_distance, 3),
+                'wall_match': round(close_12, 3),
+            }
+            if (
+                self.map_pose_is_safe(prior_candidate)
+                and mean_distance <= 0.16
+                and close_12 >= 0.60
+                and valid_fraction >= 0.90
+            ):
+                return prior_candidate
+            return None
+
         def global_candidates():
             candidates = []
-            for yaw_degrees in range(-180, 180, 10):
-                yaw = math.radians(yaw_degrees)
+            for yaw in coarse_yaws:
                 c = math.cos(yaw)
                 s = math.sin(yaw)
                 local_x = c * global_points[:, 0] - s * global_points[:, 1]
                 local_y = s * global_points[:, 0] + c * global_points[:, 1]
-                for row_index in range(0, height, 3):
+                for row_offset, row_index in enumerate(y_indices):
                     world_x = map_xs[:, None] + local_x[None, :]
-                    world_y = map_ys[row_index // 3] + local_y[None, :]
+                    world_y = map_ys[row_offset] + local_y[None, :]
                     cols = np.rint((world_x - origin_x) / resolution).astype(np.int32)
                     rows = np.rint((world_y - origin_y) / resolution).astype(np.int32)
                     valid = (cols >= 0) & (cols < width) & (rows >= 0) & (rows < height)
@@ -5527,7 +5911,7 @@ class DashboardNode(Node):
                     close_12 = (distances < 0.12).mean(axis=1)
                     close_25 = (distances < 0.25).mean(axis=1)
                     valid_fraction = valid.mean(axis=1)
-                    center_cols = np.arange(0, width, 3)
+                    center_cols = x_indices
                     center_ok = grid[row_index, center_cols] == 0
                     # Keep the whole DD100 footprint in known free space;
                     # checking only the centre can select a wall-adjacent
@@ -5572,7 +5956,7 @@ class DashboardNode(Node):
                             (
                                 float(score[index]),
                                 float(map_xs[index]),
-                                float(map_ys[row_index // 3]),
+                                float(map_ys[row_offset]),
                                 yaw,
                             )
                         )
@@ -5664,12 +6048,162 @@ class DashboardNode(Node):
             'wall_match': round(best[2], 3),
         }
 
-    def start_global_localization(self, allow_motion=False):
-        """Start the official AMCL global relocalization sequence.
+    def start_saved_pose_confirmation(self, pose):
+        """Seed AMCL from the last confirmed pose and wait for confirmation.
 
-        A scan-match pose is only a fallback hypothesis.  It must never mark
-        the robot localized by itself: AMCL has to accept it and publish a
-        stable, low-covariance pose first.
+        The robot remains stationary.  This fast path avoids a map-wide random
+        AMCL reset when the Dingo is still in the same room, while the normal
+        global search remains the safe fallback if AMCL does not agree.
+        """
+        if not self.navigation_stack_running():
+            return False
+        try:
+            candidate = {
+                'x': round(float(pose['x']), 3),
+                'y': round(float(pose['y']), 3),
+                'yaw': round(float(pose.get('yaw', 0.0)), 4),
+                'frame': 'map',
+            }
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not all(
+            math.isfinite(candidate[key]) for key in ('x', 'y', 'yaw')
+        ):
+            return False
+        if not self.map_pose_is_safe(candidate):
+            self.get_logger().warning(
+                'Ignoring the saved localization pose because the footprint '
+                'is not in known free map space'
+            )
+            with self.lock:
+                self.navigation_saved_pose = None
+            return False
+
+        self.cancel_navigation()
+        now = time.monotonic()
+        with self.lock:
+            if self.localization_search_active or self.localization_scan_match_active:
+                return False
+            self.navigation_initial_pose = candidate
+            self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = 'saved_pose'
+            self.navigation_pose_initialized = False
+            self.navigation_amcl_pose = None
+            self.navigation_amcl_covariance = None
+            self.navigation_amcl_received_at = 0.0
+            self.localization_good_count = 0
+            self.localization_last_pose = None
+            # This is a local confirmation mode, not a global reset.  The
+            # callback counts AMCL updates only while this flag is true.
+            self.localization_global_service_response = True
+            self.localization_last_global_reset = False
+            self.localization_scan_match_attempted = True
+            self.localization_allow_motion = False
+            self.localization_method = 'saved_pose'
+            self.localization_search_active = True
+            self.localization_scan_match_active = False
+            self.localization_search_started_at = now
+            self.localization_watchdog_invalid_since = 0.0
+            self.localization_watchdog_last_reset_at = now
+            self.localization_last_nomotion_update_at = 0.0
+            self.nomotion_update_future = None
+            self.navigation_status = 'localizing'
+            self.navigation_goal = None
+            self.navigation_feedback = {
+                'message': (
+                    'Χρησιμοποιώ την τελευταία επιβεβαιωμένη θέση και '
+                    'επιβεβαιώνω το LiDAR'
+                ),
+                'method': 'saved_pose',
+            }
+        self.publish_initial_pose()
+        self.request_nomotion_update()
+        self.get_logger().info(
+            'Automatic localization started from the last confirmed pose'
+        )
+        return True
+
+    def _begin_scan_match_confirmation(
+        self, candidate, source='scan_match_fast'
+    ):
+        """Seed AMCL from a validated stationary LiDAR candidate.
+
+        This path deliberately does not call ``reinitialize_global_localization``.
+        AMCL gets one strong initial hypothesis and must still publish stable,
+        low-covariance updates before the Dashboard trusts it for navigation.
+        """
+        if not self.navigation_stack_running():
+            return False
+        try:
+            normalized = {
+                'x': round(float(candidate['x']), 3),
+                'y': round(float(candidate['y']), 3),
+                'yaw': round(float(candidate.get('yaw', 0.0)), 4),
+                'frame': 'map',
+            }
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not all(
+            math.isfinite(normalized[key]) for key in ('x', 'y', 'yaw')
+        ):
+            return False
+        if not self.map_pose_is_safe(normalized):
+            self.get_logger().warning(
+                'Rejecting the LiDAR localization candidate because the '
+                'Dingo footprint is not in known free map space'
+            )
+            return False
+
+        now = time.monotonic()
+        with self.lock:
+            if self.localization_search_active or self.localization_scan_match_active:
+                return False
+            self.navigation_initial_pose = normalized
+            self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = str(source)
+            self.navigation_saved_pose = None
+            self.navigation_pose_initialized = False
+            self.navigation_amcl_pose = None
+            self.navigation_amcl_covariance = None
+            self.navigation_amcl_received_at = 0.0
+            self.localization_good_count = 0
+            self.localization_last_pose = None
+            # This is a local confirmation mode, not an AMCL particle reset.
+            self.localization_global_service_response = True
+            self.localization_last_global_reset = False
+            self.localization_scan_match_attempted = True
+            self.localization_allow_motion = False
+            self.localization_method = str(source)
+            self.localization_search_active = True
+            self.localization_scan_match_active = False
+            self.localization_search_started_at = now
+            self.localization_watchdog_invalid_since = 0.0
+            self.localization_watchdog_last_reset_at = now
+            self.localization_last_nomotion_update_at = 0.0
+            self.nomotion_update_future = None
+            self.navigation_status = 'localizing'
+            self.navigation_goal = None
+            self.navigation_feedback = {
+                'message': 'Βρέθηκε θέση από το LiDAR· επιβεβαιώνω το AMCL',
+                'method': str(source),
+                **{
+                    key: candidate[key]
+                    for key in ('score', 'mean_distance', 'wall_match')
+                    if key in candidate
+                },
+            }
+        self.publish_initial_pose()
+        self.request_nomotion_update()
+        return True
+
+    def start_global_localization(self, allow_motion=False):
+        """Start fast stationary relocalization with an official fallback.
+
+        First match the live LiDAR near the last confirmed/current pose.  This
+        avoids scattering AMCL particles and prevents the map marker from
+        jumping when the Dingo is still in the same place.  Only if the local
+        match is absent or ambiguous do we call Nav2's official map-wide
+        ``reinitialize_global_localization`` service.
         """
         if not self.navigation_stack_running():
             raise RuntimeError('Πάτησε πρώτα «Ενεργοποίηση Nav2»')
@@ -5677,6 +6211,81 @@ class DashboardNode(Node):
             if self.localization_search_active or self.localization_scan_match_active:
                 return False
         self.cancel_navigation()
+        # Stop any residual command while the stationary scan is being
+        # evaluated.  The autonomous gate is also closed by cancel_navigation.
+        self.drive(0.0, 0.0)
+
+        with self.lock:
+            map_name = self.navigation_map
+            prior = (
+                dict(self.navigation_saved_pose)
+                if self.navigation_saved_pose
+                else None
+            )
+            current_pose = (
+                dict(self.navigation_amcl_pose)
+                if self.navigation_amcl_pose
+                else None
+            )
+            current_covariance = (
+                dict(self.navigation_amcl_covariance)
+                if self.navigation_amcl_covariance
+                else None
+            )
+            odom = dict(self.state.get('odom') or {})
+            scan = dict(self.state.get('scan') or {})
+            map_ready = self.map_state is not None
+        if prior is None and map_name:
+            prior = self.load_last_localization(map_name)
+        if (
+            prior is None
+            and current_pose is not None
+            and self.navigation_pose_initialized
+            and self.amcl_pose_is_good(current_covariance)
+        ):
+            prior = current_pose
+
+        try:
+            stationary = (
+                abs(float(odom.get('linear') or 0.0)) <= 0.015
+                and abs(float(odom.get('angular') or 0.0)) <= 0.03
+            )
+            scan_age = time.time() - float(scan.get('last_update'))
+        except (TypeError, ValueError):
+            stationary = False
+            scan_age = float('inf')
+        if prior and map_ready and scan.get('points') and stationary and scan_age <= 3.0:
+            match_started_at = time.monotonic()
+            candidate = None
+            try:
+                # A single score is enough when the saved/current pose still
+                # agrees with the live walls.  This is normally sub-second;
+                # only a changed position enters the more expensive local
+                # refinement window.
+                candidate = self._scan_match_pose(
+                    prior=prior,
+                    verify_only=True,
+                )
+                if candidate is None:
+                    candidate = self._scan_match_pose(prior=prior)
+            except Exception as exc:
+                self.get_logger().warning(f'Fast LiDAR localization unavailable: {exc}')
+            match_duration = time.monotonic() - match_started_at
+            if candidate is not None and self._begin_scan_match_confirmation(
+                candidate, source='scan_match_fast'
+            ):
+                self.get_logger().info(
+                    'Fast LiDAR localization found a candidate in '
+                    f'{match_duration:.2f}s '
+                    f'(mean error {candidate["mean_distance"]:.3f}m, '
+                    f'wall match {candidate["wall_match"]:.2f})'
+                )
+                return True
+            self.get_logger().info(
+                f'Fast LiDAR localization found no unique candidate '
+                f'after {match_duration:.2f}s; using official fallback'
+            )
+
         if not self.localization_service_client.wait_for_service(timeout_sec=5.0):
             with self.lock:
                 self.navigation_status = 'failed'
@@ -5697,6 +6306,8 @@ class DashboardNode(Node):
             # map->odom transform can look like a successful new localization.
             self.navigation_initial_pose = None
             self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = None
+            self.navigation_saved_pose = None
             self.navigation_pose_initialized = False
             self.navigation_amcl_pose = None
             self.navigation_amcl_covariance = None
@@ -5758,6 +6369,19 @@ class DashboardNode(Node):
         with self.lock:
             if not self.localization_search_active:
                 return False
+            self.localization_scan_match_active = False
+            normalized = dict(candidate)
+        if not self.map_pose_is_safe(normalized):
+            with self.lock:
+                if self.localization_search_active:
+                    self.navigation_feedback = {
+                        'message': 'Η υπόθεση LiDAR είναι κοντά σε εμπόδιο· συνεχίζω με AMCL',
+                        'method': 'amcl_global',
+                    }
+            return False
+        with self.lock:
+            if not self.localization_search_active:
+                return False
             self.navigation_initial_pose = {
                 'x': round(float(candidate['x']), 3),
                 'y': round(float(candidate['y']), 3),
@@ -5765,6 +6389,8 @@ class DashboardNode(Node):
                 'frame': 'map',
             }
             self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = 'scan_match_fallback'
+            self.navigation_saved_pose = None
             self.navigation_pose_initialized = False
             self.localization_method = 'scan_match_fallback'
             self.localization_last_pose = None
@@ -5780,10 +6406,15 @@ class DashboardNode(Node):
         return True
 
     def finish_global_localization(self, success, error=''):
+        confirmed_pose = None
+        confirmed_map = None
         with self.lock:
             active = self.localization_search_active
             autonomous_mode_was_active = self.autonomous_navigation_active
             method = self.localization_method or 'amcl_global'
+            if success and self.navigation_amcl_pose:
+                confirmed_pose = dict(self.navigation_amcl_pose)
+                confirmed_map = self.navigation_map
             self.localization_search_active = False
             self.localization_scan_match_active = False
             self.localization_service_future = None
@@ -5794,10 +6425,18 @@ class DashboardNode(Node):
             self.localization_last_pose = None
             self.navigation_initial_pose = None
             self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = None
             if success:
                 # The optional LiDAR matcher can provide AMCL with a seed, but
                 # only AMCL's stable pose/covariance confirms localization.
-                method = 'amcl_global'
+                if method in (
+                    'scan_match_fast',
+                    'scan_match_fallback',
+                    'saved_pose',
+                ):
+                    method = 'amcl_scan_match'
+                else:
+                    method = 'amcl_global'
                 self.localization_method = method
                 self.auto_localize_retry_count = 0
                 self.navigation_pose_initialized = True
@@ -5806,10 +6445,15 @@ class DashboardNode(Node):
                     'message': 'Το AMCL επιβεβαίωσε σταθερή θέση στον χάρτη',
                     'method': method,
                 }
+                self.navigation_saved_pose = None
             else:
                 self.navigation_pose_initialized = False
                 self.navigation_status = 'failed'
                 self.navigation_feedback = {'error': error or 'Δεν βρέθηκε η θέση του Dingo'}
+                if method == 'saved_pose':
+                    # Never retry a seed that AMCL could not confirm.  The
+                    # next automatic attempt uses the official global reset.
+                    self.navigation_saved_pose = None
                 if (
                     active
                     and self.auto_localize
@@ -5833,6 +6477,9 @@ class DashboardNode(Node):
                         'AMCL localization failed; scheduling safe automatic '
                         f'retry {retry_number}/{self.auto_localize_max_retries}'
                     )
+        if success and confirmed_pose and confirmed_map:
+            if self.map_pose_is_safe(confirmed_pose):
+                self.save_last_localization(confirmed_map, confirmed_pose)
         if success:
             self.get_logger().info(
                 f'AMCL global localization confirmed ({method})'
@@ -5854,6 +6501,7 @@ class DashboardNode(Node):
             service_response = self.localization_global_service_response
             scan_match_attempted = self.localization_scan_match_attempted
             allow_motion = self.localization_allow_motion
+            localization_method = self.localization_method
             motion_blocked = (
                 self.state['emergency_stop'] is True
                 or self.state['safety_stop'] is True
@@ -5862,6 +6510,15 @@ class DashboardNode(Node):
             return
         if not self.navigation_stack_running():
             self.finish_global_localization(False, 'Το Nav2 σταμάτησε κατά την αναζήτηση')
+            return
+        if (
+            localization_method == 'saved_pose'
+            and time.monotonic() - started_at >= self.localization_saved_pose_timeout_s
+        ):
+            self.finish_global_localization(
+                False,
+                'Η τελευταία θέση δεν επιβεβαιώθηκε από το LiDAR',
+            )
             return
         if time.monotonic() - started_at >= self.localization_timeout_s:
             self.finish_global_localization(
@@ -5958,9 +6615,7 @@ class DashboardNode(Node):
             return
         if not pose or not self.amcl_pose_is_good(covariance):
             return
-        if not self.map_pose_is_safe(pose):
-            return
-        if self.lookup_transform('map', 'base_link') is None:
+        if not self.localization_pose_is_trusted(pose, covariance):
             return
         if time.monotonic() - last_request < 2.0:
             return
@@ -5990,9 +6645,7 @@ class DashboardNode(Node):
             pose = dict(self.navigation_amcl_pose) if self.navigation_amcl_pose else None
         return bool(
             pose_initialized
-            and self.amcl_pose_is_good(covariance)
-            and self.map_pose_is_safe(pose)
-            and self.lookup_transform('map', 'base_link') is not None
+            and self.localization_pose_is_trusted(pose, covariance)
         )
 
     def navigation_feedback_cb(self, feedback_message):
@@ -6012,29 +6665,53 @@ class DashboardNode(Node):
             goal_handle = future.result()
         except Exception as exc:  # rclpy action futures surface transport errors here
             with self.lock:
+                canceled = self.navigation_cancel_requested or self.navigation_status == 'canceling'
                 self.navigation_goal_handle = None
-                self.navigation_status = 'failed'
-                self.navigation_feedback = {'error': str(exc)}
+                self.navigation_dispatch_request_id = None
+                self.navigation_status = 'canceled' if canceled else 'failed'
+                self.navigation_feedback = {
+                    'error': 'Ο στόχος ακυρώθηκε πριν γίνει αποδεκτός από το Nav2'
+                    if canceled
+                    else str(exc)
+                }
             self.clear_navigation_path()
             self.set_autonomous_navigation_mode(False)
             return
 
         if not goal_handle.accepted:
             with self.lock:
+                canceled = self.navigation_cancel_requested or self.navigation_status == 'canceling'
                 self.navigation_goal_handle = None
-                self.navigation_status = 'rejected'
-                self.navigation_feedback = {'error': 'Ο στόχος απορρίφθηκε από το Nav2'}
+                self.navigation_dispatch_request_id = None
+                self.navigation_status = 'canceled' if canceled else 'rejected'
+                self.navigation_feedback = {
+                    'error': 'Ο στόχος ακυρώθηκε πριν γίνει αποδεκτός από το Nav2'
+                    if canceled
+                    else 'Ο στόχος απορρίφθηκε από το Nav2'
+                }
             self.clear_navigation_path()
             self.set_autonomous_navigation_mode(False)
             return
 
         with self.lock:
+            cancel_requested = (
+                self.navigation_cancel_requested
+                or self.navigation_status == 'canceling'
+            )
             self.navigation_goal_handle = goal_handle
-            self.navigation_status = 'navigating'
+            self.navigation_dispatch_request_id = None
+            self.navigation_status = 'canceling' if cancel_requested else 'navigating'
         result_future = goal_handle.get_result_async()
         with self.lock:
             self.navigation_result_future = result_future
         result_future.add_done_callback(self.navigation_result_cb)
+        if cancel_requested:
+            try:
+                goal_handle.cancel_goal_async()
+            except Exception:
+                pass
+            self.set_autonomous_navigation_mode(False)
+            return
 
     def navigation_result_cb(self, future):
         status = None
@@ -6066,7 +6743,27 @@ class DashboardNode(Node):
             # goal overlay is only for an active request.
             self.navigation_goal = None
             self.navigation_feedback = {'error': error} if error else None
+            pose_after_goal = (
+                dict(self.navigation_amcl_pose)
+                if self.navigation_amcl_pose
+                else None
+            )
+            covariance_after_goal = (
+                dict(self.navigation_amcl_covariance)
+                if self.navigation_amcl_covariance
+                else None
+            )
+            map_after_goal = self.navigation_map
         self.clear_navigation_path()
+
+        if (
+            navigation_status == 'succeeded'
+            and pose_after_goal
+            and map_after_goal
+            and self.amcl_pose_is_good(covariance_after_goal)
+            and self.map_pose_is_safe(pose_after_goal)
+        ):
+            self.save_last_localization(map_after_goal, pose_after_goal)
 
         if navigation_status == 'failed':
             self.get_logger().warning(
@@ -6121,7 +6818,11 @@ class DashboardNode(Node):
                 raise RuntimeError(
                     'Η κίνηση είναι μπλοκαρισμένη από το safety ή emergency stop.'
                 )
-            if self.navigation_goal_handle is not None:
+            if self.navigation_goal_handle is not None or self.navigation_status in (
+                'sending',
+                'navigating',
+                'canceling',
+            ) or self.navigation_pending_goal is not None:
                 raise RuntimeError('Υπάρχει ενεργός στόχος· ακύρωσέ τον πρώτα')
             if self.drive_heading_goal_handle is not None or self.drive_heading_status in (
                 'sending',
@@ -6175,12 +6876,15 @@ class DashboardNode(Node):
         try:
             self.send_navigation_goal(room['x'], room['y'], internal=True)
         except (RuntimeError, ValueError) as exc:
-            self.cancel_patrol()
-            self.publish_voice_reply(
-                f'Η βόλτα δεν ξεκίνησε: {exc}.',
-                ok=False,
-                action='patrol',
-            )
+            with self.lock:
+                patrol_still_active = self.patrol_active
+            if patrol_still_active:
+                self.cancel_patrol()
+                self.publish_voice_reply(
+                    f'Η βόλτα δεν ξεκίνησε: {exc}.',
+                    ok=False,
+                    action='patrol',
+                )
             return False
         return True
 
@@ -6562,6 +7266,10 @@ class DashboardNode(Node):
         with self.lock:
             path_goal_handle = self.navigation_path_goal_handle
             self.navigation_path_request_id += 1
+            self.navigation_pending_goal = None
+            self.navigation_preflight_request_id = None
+            if self.navigation_dispatch_request_id is not None:
+                self.navigation_cancel_requested = True
             self.navigation_path_goal_handle = None
             self.navigation_path_result_future = None
             self.navigation_path = None
@@ -6573,8 +7281,58 @@ class DashboardNode(Node):
             except Exception:
                 pass
 
-    def request_navigation_path(self, x, y):
-        """Ask Nav2 for the planner path that corresponds to the active goal."""
+    @staticmethod
+    def navigation_path_failure_message(error_code, error_msg=''):
+        """Turn Nav2 planner result codes into an actionable Dashboard error."""
+        error_msg = str(error_msg or '').strip()
+        if error_msg:
+            return error_msg
+        messages = {
+            # nav2_msgs/ComputePathToPose uses 2xx planner error codes.
+            203: 'Η αρχική θέση είναι έξω από τα όρια του χάρτη.',
+            204: 'Ο στόχος είναι έξω από τα όρια του χάρτη.',
+            208: (
+                'Ο planner δεν βρήκε ασφαλή διαδρομή: '
+                'το costmap δεν έχει αρκετό ελεύθερο χώρο για το footprint του Dingo.'
+            ),
+        }
+        if error_code in messages:
+            return f'{messages[error_code]} (κωδικός {error_code})'
+        return f'Ο planner δεν βρήκε διαδρομή (κωδικός {error_code})'
+
+    def navigation_preflight_failed(self, request_id, error):
+        """Fail a planned goal without ever enabling autonomous motion."""
+        error = str(error or 'Ο planner δεν επέστρεψε έγκυρη διαδρομή')
+        preflight = False
+        patrol_active = False
+        with self.lock:
+            if request_id != self.navigation_path_request_id:
+                return False
+            preflight = self.navigation_preflight_request_id == request_id
+            self.navigation_path_status = 'failed'
+            self.navigation_path_error = error
+            if preflight:
+                self.navigation_pending_goal = None
+                self.navigation_preflight_request_id = None
+                self.navigation_dispatch_request_id = None
+                self.navigation_cancel_requested = False
+                self.navigation_status = 'failed'
+                self.navigation_goal = None
+                self.navigation_feedback = {'error': error}
+                patrol_active = self.patrol_active
+        if preflight:
+            self.set_autonomous_navigation_mode(False)
+            if patrol_active:
+                self.cancel_patrol()
+                self.publish_voice_reply(
+                    f'Η βόλτα σταμάτησε: {error}.',
+                    ok=False,
+                    action='patrol',
+                )
+        return preflight
+
+    def request_navigation_path(self, x, y, preflight_goal=None):
+        """Ask Nav2 for a path, optionally gating a pending motion goal on it."""
         with self.lock:
             previous_handle = self.navigation_path_goal_handle
             self.navigation_path_request_id += 1
@@ -6584,6 +7342,9 @@ class DashboardNode(Node):
             self.navigation_path = None
             self.navigation_path_status = 'computing'
             self.navigation_path_error = None
+            if preflight_goal is not None:
+                self.navigation_pending_goal = preflight_goal
+                self.navigation_preflight_request_id = request_id
         if previous_handle is not None:
             try:
                 previous_handle.cancel_goal_async()
@@ -6627,13 +7388,7 @@ class DashboardNode(Node):
             )
             return True
         except Exception as exc:
-            with self.lock:
-                if (
-                    request_id == self.navigation_path_request_id
-                    and self.navigation_path_status != 'ready'
-                ):
-                    self.navigation_path_status = 'failed'
-                    self.navigation_path_error = str(exc)
+            self.navigation_preflight_failed(request_id, str(exc))
             self.get_logger().warning(f'Could not compute Nav2 path: {exc}')
             return False
 
@@ -6642,10 +7397,11 @@ class DashboardNode(Node):
             goal_handle = future.result()
         except Exception as exc:
             with self.lock:
-                if request_id == self.navigation_path_request_id:
+                current = request_id == self.navigation_path_request_id
+                if current:
                     self.navigation_path_result_future = None
-                    self.navigation_path_status = 'failed'
-                    self.navigation_path_error = str(exc)
+            if current:
+                self.navigation_preflight_failed(request_id, str(exc))
             return
 
         with self.lock:
@@ -6658,11 +7414,12 @@ class DashboardNode(Node):
                     pass
             return
         if goal_handle is None or not goal_handle.accepted:
+            error = 'Ο planner του Nav2 απέρριψε τον υπολογισμό διαδρομής'
             with self.lock:
-                self.navigation_path_goal_handle = None
-                self.navigation_path_result_future = None
-                self.navigation_path_status = 'failed'
-                self.navigation_path_error = 'Ο planner του Nav2 απέρριψε τον υπολογισμό διαδρομής'
+                if request_id == self.navigation_path_request_id:
+                    self.navigation_path_goal_handle = None
+                    self.navigation_path_result_future = None
+            self.navigation_preflight_failed(request_id, error)
             return
 
         result_future = goal_handle.get_result_async()
@@ -6683,6 +7440,7 @@ class DashboardNode(Node):
         path = []
         error = ''
         succeeded = False
+        error_code = 0
         try:
             result = future.result()
             result_message = result.result
@@ -6690,7 +7448,7 @@ class DashboardNode(Node):
             error = str(getattr(result_message, 'error_msg', '') or '')
             error_code = int(getattr(result_message, 'error_code', 0) or 0)
             if not succeeded and not error:
-                error = f'Ο planner δεν βρήκε διαδρομή (κωδικός {error_code})'
+                error = self.navigation_path_failure_message(error_code)
             for pose_stamped in getattr(result_message.path, 'poses', []) or []:
                 point = pose_stamped.pose.position
                 point_x = float(point.x)
@@ -6702,14 +7460,118 @@ class DashboardNode(Node):
         except Exception as exc:
             error = str(exc)
 
+        preflight_goal = None
         with self.lock:
             if request_id != self.navigation_path_request_id:
                 return
+            if self.navigation_preflight_request_id == request_id:
+                preflight_goal = self.navigation_pending_goal
             self.navigation_path_goal_handle = None
             self.navigation_path_result_future = None
             self.navigation_path = path or None
             self.navigation_path_status = 'ready' if succeeded and path else 'failed'
             self.navigation_path_error = error or None
+        if preflight_goal is not None:
+            if not succeeded or not path:
+                self.navigation_preflight_failed(
+                    request_id,
+                    error or self.navigation_path_failure_message(error_code),
+                )
+            else:
+                self.dispatch_preflight_navigation_goal(preflight_goal, request_id)
+
+    def dispatch_preflight_navigation_goal(self, goal, request_id):
+        """Send NavigateToPose only after ComputePathToPose succeeded."""
+        with self.lock:
+            if (
+                request_id != self.navigation_path_request_id
+                or self.navigation_preflight_request_id != request_id
+                or self.navigation_pending_goal is not goal
+                or self.navigation_status != 'sending'
+            ):
+                return False
+            if (
+                self.state.get('emergency_stop') is True
+                or self.state.get('safety_stop') is True
+            ):
+                error = 'Η πλοήγηση είναι μπλοκαρισμένη από το safety ή emergency stop.'
+                self.navigation_pending_goal = None
+                self.navigation_preflight_request_id = None
+                self.navigation_status = 'failed'
+                self.navigation_goal = None
+                self.navigation_feedback = {'error': error}
+                blocked = True
+            else:
+                blocked = False
+                self.navigation_dispatch_request_id = request_id
+                self.navigation_pending_goal = None
+                self.navigation_preflight_request_id = None
+                self.navigation_cancel_requested = False
+        if blocked:
+            self.set_autonomous_navigation_mode(False)
+            return False
+
+        if not self.set_autonomous_navigation_mode(True):
+            with self.lock:
+                if self.navigation_dispatch_request_id == request_id:
+                    self.navigation_dispatch_request_id = None
+                    self.navigation_status = 'failed'
+                    self.navigation_goal = None
+                    self.navigation_feedback = {
+                        'error': (
+                            'Το autonomous mode δεν ενεργοποιήθηκε· '
+                            'δεν στάλθηκε εντολή κίνησης'
+                        )
+                    }
+            return False
+
+        # A cancel can arrive from the web UI while the gate is being enabled.
+        # Check the token again before sending any motion action.
+        with self.lock:
+            blocked_now = (
+                self.state.get('emergency_stop') is True
+                or self.state.get('safety_stop') is True
+            )
+            canceled = (
+                self.navigation_dispatch_request_id != request_id
+                or self.navigation_cancel_requested
+                or self.navigation_status != 'sending'
+            )
+            if blocked_now and self.navigation_dispatch_request_id == request_id:
+                self.navigation_dispatch_request_id = None
+                self.navigation_status = 'failed'
+                self.navigation_goal = None
+                self.navigation_feedback = {
+                    'error': 'Η πλοήγηση μπλοκαρίστηκε από το safety ή emergency stop.'
+                }
+            elif canceled and self.navigation_dispatch_request_id == request_id:
+                self.navigation_dispatch_request_id = None
+                self.navigation_status = 'canceled'
+                self.navigation_goal = None
+                self.navigation_feedback = {
+                    'error': 'Ο στόχος ακυρώθηκε πριν σταλεί στο Nav2'
+                }
+        if blocked_now or canceled:
+            self.set_autonomous_navigation_mode(False)
+            return False
+
+        try:
+            future = self.navigation_client.send_goal_async(
+                goal,
+                feedback_callback=self.navigation_feedback_cb,
+            )
+            future.add_done_callback(self.navigation_goal_response_cb)
+        except Exception as exc:
+            with self.lock:
+                if self.navigation_dispatch_request_id == request_id:
+                    self.navigation_dispatch_request_id = None
+                    self.navigation_status = 'failed'
+                    self.navigation_feedback = {'error': str(exc)}
+                    self.navigation_goal = None
+            self.set_autonomous_navigation_mode(False)
+            self.get_logger().warning(f'Could not send Nav2 goal: {exc}')
+            return False
+        return True
 
     def send_navigation_goal(self, x, y, internal=False):
         if self.follow_active:
@@ -6743,6 +7605,8 @@ class DashboardNode(Node):
                 'canceling',
             ):
                 raise RuntimeError('Υπάρχει ενεργός στόχος· ακύρωσέ τον πρώτα')
+            if self.navigation_pending_goal is not None or self.navigation_dispatch_request_id is not None:
+                raise RuntimeError('Υπάρχει στόχος υπό έλεγχο· περίμενε ή ακύρωσέ τον πρώτα')
             if self.drive_heading_goal_handle is not None or self.drive_heading_status in (
                 'sending',
                 'moving',
@@ -6775,50 +7639,39 @@ class DashboardNode(Node):
             }
             self.navigation_feedback = None
             self.navigation_status = 'sending'
-        if not self.set_autonomous_navigation_mode(True):
+            self.navigation_cancel_requested = False
+
+        # Plan first.  Until this asynchronous request succeeds, autonomous
+        # mode stays disabled and NavigateToPose is never sent.
+        if not self.request_navigation_path(x, y, preflight_goal=goal):
             with self.lock:
-                self.navigation_status = 'failed'
-                self.navigation_goal = None
-                self.navigation_feedback = {
-                    'error': (
-                        'Το autonomous mode δεν ενεργοποιήθηκε· '
-                        'δεν στάλθηκε εντολή κίνησης'
-                    )
-                }
-            self.clear_navigation_path()
-            raise RuntimeError(
-                'Δεν ενεργοποιήθηκε το autonomous mode του Clearpath· '
-                'δεν στάλθηκε ο στόχος για λόγους ασφάλειας.'
-            )
-        try:
-            future = self.navigation_client.send_goal_async(
-                goal,
-                feedback_callback=self.navigation_feedback_cb,
-            )
-            future.add_done_callback(self.navigation_goal_response_cb)
-        except Exception as exc:
-            with self.lock:
-                self.navigation_status = 'failed'
-                self.navigation_feedback = {'error': str(exc)}
-                self.navigation_goal = None
-            self.clear_navigation_path()
-            self.set_autonomous_navigation_mode(False)
-            raise RuntimeError(f'Δεν στάλθηκε ο στόχος στο Nav2: {exc}') from exc
-        self.request_navigation_path(x, y)
+                error = self.navigation_path_error or 'Ο planner δεν είναι έτοιμος'
+            raise RuntimeError(error)
         return True
 
     def cancel_navigation(self):
         self.cancel_patrol()
         with self.lock:
             goal_handle = self.navigation_goal_handle
+            pending = self.navigation_pending_goal is not None or self.navigation_preflight_request_id is not None
+            dispatching = self.navigation_dispatch_request_id is not None
             autonomous_mode_was_active = self.autonomous_navigation_active
             if goal_handle is not None:
                 self.navigation_status = 'canceling'
+            elif dispatching:
+                self.navigation_cancel_requested = True
+                self.navigation_status = 'canceling'
+            elif pending:
+                self.navigation_status = 'canceled'
+                self.navigation_goal = None
+                self.navigation_feedback = {
+                    'error': 'Ο έλεγχος διαδρομής ακυρώθηκε πριν σταλεί κίνηση'
+                }
         self.clear_navigation_path()
         if goal_handle is None:
-            if autonomous_mode_was_active:
+            if autonomous_mode_was_active or dispatching:
                 self.set_autonomous_navigation_mode(False)
-            return False
+            return bool(pending or dispatching)
         try:
             goal_handle.cancel_goal_async()
         except Exception as exc:
@@ -6831,6 +7684,19 @@ class DashboardNode(Node):
         return True
 
     def stop_navigation(self):
+        with self.lock:
+            pose_to_save = (
+                dict(self.navigation_amcl_pose)
+                if self.navigation_amcl_pose
+                else None
+            )
+            covariance_to_save = (
+                dict(self.navigation_amcl_covariance)
+                if self.navigation_amcl_covariance
+                else None
+            )
+            map_to_save = self.navigation_map
+            pose_was_initialized = self.navigation_pose_initialized
         self.stop_follow(silent=True)
         self.cancel_drive_heading()
         self.cancel_spin()
@@ -6860,8 +7726,20 @@ class DashboardNode(Node):
             self.navigation_result_future = None
             self.navigation_goal = None
             self.navigation_feedback = None
+            self.navigation_pending_goal = None
+            self.navigation_preflight_request_id = None
+            self.navigation_dispatch_request_id = None
+            self.navigation_cancel_requested = False
+            self.navigation_path_goal_handle = None
+            self.navigation_path_result_future = None
+            self.navigation_path = None
+            self.navigation_path_status = 'idle'
+            self.navigation_path_error = None
+            self.navigation_path_request_id += 1
             self.navigation_initial_pose = None
             self.navigation_initial_pose_sent_at = 0.0
+            self.navigation_initial_pose_source = None
+            self.navigation_saved_pose = None
             self.navigation_pose_initialized = False
             self.navigation_amcl_pose = None
             self.navigation_amcl_covariance = None
@@ -6877,6 +7755,14 @@ class DashboardNode(Node):
             self.drive_heading_feedback = None
             self.drive_heading_distance_m = None
         self.drive(0.0, 0.0)
+        if (
+            pose_was_initialized
+            and pose_to_save
+            and map_to_save
+            and self.amcl_pose_is_good(covariance_to_save)
+            and self.map_pose_is_safe(pose_to_save)
+        ):
+            self.save_last_localization(map_to_save, pose_to_save)
         return stopped
 
     def navigation_snapshot(self):
@@ -6913,6 +7799,8 @@ class DashboardNode(Node):
                 if self.navigation_initial_pose
                 else None
             )
+            initial_pose_source = self.navigation_initial_pose_source
+            saved_pose_available = self.navigation_saved_pose is not None
             pose_initialized = self.navigation_pose_initialized
             amcl_pose = (
                 dict(self.navigation_amcl_pose)
@@ -6934,7 +7822,11 @@ class DashboardNode(Node):
                     self.localization_good_required,
                     self.localization_scan_match_good_required,
                 )
-                if localization_method == 'scan_match_fallback'
+                if localization_method in (
+                    'scan_match_fast',
+                    'scan_match_fallback',
+                    'saved_pose',
+                )
                 else self.localization_good_required
             )
             localization_global_service_response = (
@@ -6979,12 +7871,12 @@ class DashboardNode(Node):
             'map': map_name,
             'localized': bool(
                 pose_initialized
-                and self.amcl_pose_is_good(covariance)
-                and self.map_pose_is_safe(amcl_pose)
-                and self.lookup_transform('map', 'base_link') is not None
+                and self.localization_pose_is_trusted(amcl_pose, covariance)
             ),
             'localization_searching': localization_searching,
             'localization_method': localization_method,
+            'initial_pose_source': initial_pose_source,
+            'saved_pose_available': bool(saved_pose_available),
             'localization_good_count': localization_good_count,
             'localization_good_required': localization_good_required,
             'global_localization_service_ready': bool(
@@ -7005,7 +7897,7 @@ class DashboardNode(Node):
                 'active': bool(autonomous_navigation_active),
                 'bt_quality_bypassed': bool(
                     autonomous_navigation_active
-                    and not autonomous_navigation_gate_locked
+                    and self.autonomous_navigation_bypass_bt_quality
                 ),
                 'bt_quality_gate_topic': self.bt_quality_gate_topic,
                 'bt_quality_gate_locked': bool(autonomous_navigation_gate_locked),
@@ -7453,6 +8345,57 @@ def serve(node, port):
                 {'Cache-Control': 'no-cache'},
             )
 
+        def serve_test_audio(self, audio_path, content_type):
+            """Serve the mobile TTS sample, including browser byte ranges."""
+            try:
+                audio = audio_path.read_bytes()
+            except (FileNotFoundError, OSError):
+                return self.send(404, '{"error":"voice sample unavailable"}')
+            total = len(audio)
+            if total == 0:
+                return self.send(404, '{"error":"voice sample is empty"}')
+
+            status = 200
+            start = 0
+            end = total - 1
+            range_header = self.headers.get('Range', '').strip()
+            if range_header.startswith('bytes='):
+                requested = range_header[6:].split(',', 1)[0].strip()
+                try:
+                    raw_start, raw_end = requested.split('-', 1)
+                    if raw_start:
+                        start = int(raw_start)
+                        end = int(raw_end) if raw_end else total - 1
+                    else:
+                        suffix_length = int(raw_end)
+                        start = max(0, total - suffix_length)
+                        end = total - 1
+                    if start < 0 or start >= total or end < start:
+                        raise ValueError
+                    end = min(end, total - 1)
+                except (TypeError, ValueError):
+                    return self.send(
+                        416,
+                        b'',
+                        content_type,
+                        {'Content-Range': f'bytes */{total}'},
+                    )
+                status = 206
+
+            headers = {
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'no-store, max-age=0',
+                'Content-Disposition': 'inline; filename="dingo-supertonic-f1"',
+            }
+            if status == 206:
+                headers['Content-Range'] = f'bytes {start}-{end}/{total}'
+            return self.send(
+                status,
+                audio[start:end + 1],
+                content_type,
+                headers,
+            )
+
         def serve_microphone_websocket(self):
             """Stream ch0 PCM to a browser that explicitly opted in."""
             if self.headers.get('Upgrade', '').lower() != 'websocket':
@@ -7564,6 +8507,13 @@ def serve(node, port):
             path = urlparse(self.path).path
             if path == '/api/state':
                 return self.send(200, self.json(node.snapshot()))
+            if path == '/api/tts-test-supertonic-female':
+                if SUPERTONIC_TEST_AUDIO_MP3.is_file():
+                    return self.serve_test_audio(
+                        SUPERTONIC_TEST_AUDIO_MP3,
+                        'audio/mpeg',
+                    )
+                return self.serve_test_audio(SUPERTONIC_TEST_AUDIO, 'audio/wav')
             if path == '/api/microphone-ws':
                 return self.serve_microphone_websocket()
             if path == '/api/microphone-upload':

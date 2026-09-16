@@ -74,6 +74,11 @@ The localization process uses the official Clearpath Nav2 launch
 with `map:=dingo_map` and `/scan`; AMCL continuously publishes `map -> odom`,
 while the platform publishes `odom -> base_link`.
 
+Fast DDS shared-memory transport is disabled in the managed ROS services
+because this host accumulates stale shared-memory port locks; normal UDP
+discovery and transport remain enabled so the platform, sensors, AMCL, and
+Dashboard keep a single consistent ROS graph.
+
 Open `http://localhost:8090` for the new dashboard. Keep the STOP button and
 the physical emergency stop available whenever teleop is enabled.
 
@@ -125,17 +130,19 @@ in green as soon as Nav2 returns it. Use `Ακύρωση στόχου` for the c
 goal or `Κλείσιμο Nav2` to stop localization and navigation. SLAM and
 autonomous navigation are separate modes and must not run at the same time.
 When a goal, patrol, Spin, or Drive-on-Heading action is explicitly started
-from the Dashboard or voice assistant, the Dashboard temporarily releases
-only the BT-quality lock through the fail-closed gate topic, so a sleeping
-Bluetooth PS5 cannot block Nav2. The physical emergency-stop and safety-stop
-locks remain at priorities 255 and 254. On completion, cancellation, shutdown,
-or service restart the gate returns to locked automatically; the Mapping view
-shows the current mode.
+from the Dashboard or voice assistant, the Dashboard closes only its
+autonomous gate so PS5 teleop cannot override Nav2. Nav2's external input is
+kept at priority `253`, above the gate at `252` and below the physical
+emergency-stop and safety-stop locks (255 and 254). While idle the gate is
+open for normal PS5 teleop; on cancellation, shutdown, or service loss the
+0.5 s mux timeout returns it to the fail-closed state. The Mapping view shows
+the current mode.
 The gate is persisted in the Clearpath generator input at
 `/etc/clearpath/robot.yaml` under
-`platform.extras.ros_parameters.twist_mux.locks.bt_quality` (topic
-`joy_teleop/bt_quality_stop_gate`, timeout `0.5`). If Clearpath parameters are
-regenerated, keep that block and run
+`platform.extras.ros_parameters.twist_mux`: the external command priority is
+`253`; the `locks.bt_quality` priority is `252` and its topic is
+`joy_teleop/bt_quality_stop_gate` with timeout `0.5`. If Clearpath parameters
+are regenerated, keep that block and run
 `/opt/ros/jazzy/lib/clearpath_generator_robot/generate_param -s /etc/clearpath`
 before restarting the platform service. The reference overlay is kept in
 `systemd/twist_mux-autonomous.yaml`.

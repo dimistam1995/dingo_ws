@@ -39,7 +39,7 @@
     @media(max-width:520px){.assistant-composer{align-items:stretch;flex-direction:column}.assistant-composer .action{width:100%}}
   </style>
   <style>
-    .voice-audio-control{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.voice-audio-control small{color:var(--muted);font-size:11px}
+    .voice-audio-control{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.voice-audio-control small{color:var(--muted);font-size:11px}.voice-audio-control audio{width:min(360px,100%);height:40px}
   </style>
 </head>
 <body>
@@ -116,6 +116,7 @@
           <div class="voice-meter" aria-label="Στάθμη μικροφώνου"><span id="voiceMeterBar"></span></div>
           <div class="voice-audio-control"><button id="voiceAudioToggle" class="action primary" type="button">▶ Άκουσε το μικρόφωνο</button><small id="voiceAudioState">Κλειστό · πάτησε το κουμπί και χρησιμοποίησε ακουστικά</small></div>
           <div class="voice-audio-control"><button id="voiceMobileToggle" class="action primary" type="button">🎙️ Μίλησε από το κινητό</button><small id="voiceMobileState">Κλειστό · το κινητό θα στείλει ήχο στον βοηθό</small></div>
+          <div class="voice-audio-control"><audio controls preload="none" playsinline src="api/tts-test-supertonic-female" aria-label="Δείγμα γυναικείας ελληνικής φωνής Supertonic"></audio><a class="action" href="api/tts-test-supertonic-female" target="_blank" rel="noopener">Άνοιγμα ήχου</a><small>Δοκιμή τοπικής γυναικείας φωνής Supertonic F1 · πάτησε ▶ από το κινητό</small></div>
           <div class="voice-monitor-meta"><div class="row"><span>Αναγνώριση φωνής</span><span id="voiceSttBackend">—</span></div><div class="row"><span>Τελευταίο κείμενο</span><span id="voiceLastTranscript">—</span></div><div class="row"><span>Wake score</span><span id="voiceWakeScore">—</span></div><div class="row"><span>Κατεύθυνση φωνής</span><span id="voiceDirection" class="voice-angle quiet">—</span></div></div>
           <div class="voice-feature-grid"><div id="voiceFeatureDoa" class="voice-feature"><span>DoA / VAD</span><strong>Αναμονή</strong></div><div id="voiceFeatureBeam" class="voice-feature"><span>Beamforming</span><strong>Αναμονή</strong></div><div id="voiceFeatureNoise" class="voice-feature"><span>Noise reduction</span><strong>Αναμονή</strong></div><div id="voiceFeatureEcho" class="voice-feature"><span>Echo cancellation</span><strong>Αναμονή</strong></div><div id="voiceFeatureGain" class="voice-feature"><span>Auto gain</span><strong>Αναμονή</strong></div><div id="voiceFeatureLed" class="voice-feature"><span>Τοπική ένδειξη</span><strong id="voiceLedState">LED / Dashboard</strong></div></div>
           <div class="voice-direction-control"><label><input id="voiceDirectionToggle" type="checkbox"><span>Ενεργοποίηση κατεύθυνσης φωνής</span></label><small id="voiceDirectionToggleState">Κλειστή · δεν στρίβει τη βάση</small></div>
@@ -202,6 +203,7 @@
     let assistantLastTranscriptSeq = 0;
     let assistantSkipTranscript = null;
     let assistantPending = false;
+    let assistantTyping = null;
     let microphoneSocket = null;
     let microphoneAudioContext = null;
     let microphoneGainNode = null;
@@ -263,7 +265,43 @@
     function jsonOptions(value) { return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}; }
     function stopCommand() { fetch(base+'api/drive',jsonOptions({linear:0,angular:0})).catch(()=>{}); }
 
+    function finishAssistantTyping() {
+      if(!assistantTyping)return;
+      clearTimeout(assistantTyping.timer);
+      assistantTyping.body.textContent=assistantTyping.message;
+      assistantTyping.bubble.classList.remove('typing');
+      assistantTyping=null;
+    }
+
+    function typeAssistantMessage(bubble, body, message) {
+      finishAssistantTyping();
+      const characters=Array.from(message);
+      if(!characters.length){body.textContent='';return;}
+      assistantTyping={bubble:bubble,body:body,message:message,timer:null,index:0};
+      bubble.classList.add('typing');
+      const list=$('assistantMessages');
+      const tick=()=>{
+        if(!assistantTyping||assistantTyping.body!==body)return;
+        assistantTyping.index++;
+        const visible=characters.slice(0,assistantTyping.index).join('');
+        body.textContent=visible+(assistantTyping.index<characters.length?'▍':'');
+        list.scrollTop=list.scrollHeight;
+        if(assistantTyping.index<characters.length){
+          // Keep long answers pleasant to read without making the user wait
+          // for every single character for too long.
+          const delay=characters.length>900?2:4;
+          assistantTyping.timer=setTimeout(tick,delay);
+        }else{
+          body.textContent=message;
+          bubble.classList.remove('typing');
+          assistantTyping=null;
+        }
+      };
+      tick();
+    }
+
     function appendAssistantMessage(role, message, ok=true) {
+      finishAssistantTyping();
       const list=$('assistantMessages');
       list.querySelector('.assistant-empty')?.remove();
       const bubble=document.createElement('div');
@@ -271,8 +309,10 @@
       const label=document.createElement('small');
       label.textContent=role==='user'?'Εσύ':'Dingo';
       const body=document.createElement('div');
-      body.textContent=String(message||'');
+      const fullMessage=String(message||'');
+      body.textContent=fullMessage;
       bubble.append(label,body);list.append(bubble);list.scrollTop=list.scrollHeight;
+      if(role==='dingo'&&ok&&fullMessage)typeAssistantMessage(bubble,body,fullMessage);
     }
 
     function refreshVoiceFeature(id, enabled, label) {
@@ -870,7 +910,11 @@
       // The yellow marker is informational; only trusted map_pose is used for
       // navigation and LiDAR projection.
       const poseTrusted=Boolean(currentNavigation&&currentNavigation.localized&&currentState&&currentState.map_pose);
-      const pose=poseTrusted?currentState.map_pose:(currentNavigation&&currentNavigation.amcl_pose)||(currentState&&currentState.localization&&currentState.localization.pose);
+      // During a global search AMCL publishes provisional random hypotheses.
+      // Do not draw those as if they were the Dingo's real map position; the
+      // marker reappears only after the Dashboard's localization gate passes.
+      const mapSearching=Boolean(currentNavigation&&currentNavigation.localization_searching);
+      const pose=poseTrusted?currentState.map_pose:(mapSearching?null:(currentNavigation&&currentNavigation.amcl_pose)||(currentState&&currentState.localization&&currentState.localization.pose));
       if(pose&&!initialPoseMode){
         const p=worldToCanvas(pose.x,pose.y),heading=Number(pose.yaw)||0;
         ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-heading);ctx.fillStyle=poseTrusted?'#4c9cff':'#ffc857';ctx.strokeStyle='#d9ecff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-11,-10);ctx.lineTo(-7,0);ctx.lineTo(-11,10);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
@@ -968,6 +1012,7 @@
         $('navPose').textContent=initialPoseMode?'× Ακύρωση θέσης':'📍 Ορισμός θέσης';
         if(emergencyStop===true) text('navigationHint','Η κίνηση είναι μπλοκαρισμένη: απελευθέρωσε πρώτα το κόκκινο emergency stop.');
         else if(safetyStop===true) text('navigationHint','Η κίνηση είναι μπλοκαρισμένη από το safety stop.');
+        else if(state.status==='localizing'&&state.localization_method==='saved_pose') text('navigationHint','Χρησιμοποιείται η τελευταία επιβεβαιωμένη θέση και ελέγχεται από το LiDAR — χωρίς κίνηση.');
         else if(state.status==='localizing') text('navigationHint','Γίνεται αντιστοίχιση LiDAR με τον χάρτη. Αν χρειαστεί, το Dingo θα περιστραφεί αργά· κράτησε την περιοχή ελεύθερη.');
         else if(state.status==='ready'&&!state.localized) text('navigationHint',state.feedback&&state.feedback.message?state.feedback.message:'Το Nav2 είναι έτοιμο. Περιμένω το LiDAR για αυτόματο Global Localization.');
         else if(state.status==='ready') text('navigationHint','Nav2 έτοιμο. Πάτησε πάνω σε ελεύθερο σημείο του χάρτη για να πάει εκεί το Dingo.');
@@ -975,7 +1020,7 @@
         else if((state.status==='sending'||state.status==='navigating')&&state.path_status==='failed') text('navigationHint','Πλοήγηση ενεργή, αλλά το Nav2 δεν επέστρεψε διαδρομή για προβολή.');
         else if(state.status==='navigating') text('navigationHint',state.feedback&&state.feedback.distance_remaining!=null?'Πλοήγηση ενεργή — απομένουν '+format(state.feedback.distance_remaining,2)+' m.':'Πλοήγηση ενεργή…');
         else if(state.status==='succeeded') text('navigationHint','Το Dingo έφτασε στον τελευταίο στόχο. Πάτησε νέο σημείο για επόμενη διαδρομή.');
-        else if(state.status==='failed'||state.status==='rejected') text('navigationHint',(state.feedback&&state.feedback.error)||'Η πλοήγηση απέτυχε.');
+        else if(state.status==='failed'||state.status==='rejected') text('navigationHint',(state.feedback&&state.feedback.error)||state.path_error||'Η πλοήγηση απέτυχε.');
         else if(!state.running) text('navigationHint','Διάλεξε αποθηκευμένο χάρτη και ενεργοποίησε το Nav2. Η θέση θα βρεθεί αυτόματα από το Global Localization.');
         if(autonomous.active && (state.status==='sending'||state.status==='navigating')) text('navigationHint','Autonomous mode ενεργό — το Bluetooth-quality lock παρακάμπτεται προσωρινά. Τα physical E-stop/safety stops παραμένουν ενεργά.');
         if(currentMap) drawMap(currentMap);
@@ -1071,7 +1116,7 @@
     async function saveMap() { const name=$('mapName').value.trim()||'dingo_map';try{await api('api/map/save',jsonOptions({name:name}));showToast('Ο χάρτης αποθηκεύεται ως '+name);$('mapName').value='';setTimeout(refreshMaps,3500);await refreshMapping();}catch(e){showToast(e.message);}}
     async function refreshMaps() { try { const maps=await api('api/maps');const list=$('savedList'),select=$('navMap'),selected=select.value;list.textContent='';select.textContent='';if(!maps.length){list.innerHTML='<div class="empty-list">Δεν έχουν αποθηκευτεί χάρτες.</div>';select.innerHTML='<option value="">Δεν υπάρχει αποθηκευμένος χάρτης</option>';return;}maps.forEach(item=>{const row=document.createElement('div');row.className='saved-row';const strong=document.createElement('strong');strong.textContent=item.name;const small=document.createElement('small');small.textContent=new Date(item.updated*1000).toLocaleString('el-GR');row.append(strong,small);list.append(row);const option=document.createElement('option');option.value=item.name;option.textContent=item.name;select.append(option);});select.value=maps.some(item=>item.name===selected)?selected:maps[0].name;refreshNavigation();}catch(e){} }
     async function startNavigation() { try { await api('api/navigation',jsonOptions({action:'start',map:$('navMap').value}));showToast('Το Nav2 ξεκινά και θα κάνει αυτόματο Global Localization');await refreshNavigation();await refreshMapping(); } catch(e) { showToast(e.message); } }
-    async function startGlobalLocalization() { if(!window.confirm('Θα γίνει πρώτα το επίσημο AMCL global reset. Αν δεν βρεθεί στατική λύση LiDAR, το Dingo μπορεί να περιστραφεί αργά έως 45 δευτερόλεπτα. Η περιοχή είναι ελεύθερη;'))return;try{await api('api/navigation',jsonOptions({action:'global_localization',allow_motion:true}));showToast('Ξεκίνησε το AMCL global localization');await refreshNavigation();}catch(e){showToast(e.message);} }
+    async function startGlobalLocalization() { if(!window.confirm('Θα γίνει πρώτα γρήγορη, στατική εύρεση με το LiDAR κοντά στην τελευταία θέση. Μόνο αν δεν βρεθεί λύση θα γίνει επίσημο AMCL global search και πιθανή αργή περιστροφή. Η περιοχή είναι ελεύθερη;'))return;try{await api('api/navigation',jsonOptions({action:'global_localization',allow_motion:true}));showToast('Ξεκίνησε η γρήγορη εύρεση θέσης με LiDAR');await refreshNavigation();}catch(e){showToast(e.message);} }
     async function stopNavigation() { try { await api('api/navigation',jsonOptions({action:'stop'}));showToast('Η αυτόνομη πλοήγηση σταμάτησε');await refreshNavigation();await refreshMapping(); } catch(e) { showToast(e.message); } }
     async function cancelNavigation() { try { await api('api/navigation',jsonOptions({action:'cancel'}));showToast('Ο στόχος ακυρώνεται');await refreshNavigation(); } catch(e) { showToast(e.message); } }
     $('startMapping').onclick=startMapping;$('stopMapping').onclick=stopMapping;$('saveMap').onclick=saveMap;$('navStart').onclick=startNavigation;$('navGlobal').onclick=startGlobalLocalization;$('navPose').onclick=setInitialPose;$('navStop').onclick=stopNavigation;$('navCancel').onclick=cancelNavigation;$('navMap').onchange=refreshNavigation;

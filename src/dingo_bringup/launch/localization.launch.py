@@ -53,7 +53,14 @@ def launch_navigation(context, *args, **kwargs):
             # Nav2 failure.  Keep the planner/costmaps and collision_monitor;
             # disable only this duplicate RPP pre-check.
             'controller_server.ros__parameters.FollowPath.use_collision_detection': 'false',
-            'controller_server.ros__parameters.FollowPath.use_rotate_to_heading': 'true',
+            # Dashboard goals are point goals: the user selects an x/y cell and
+            # does not request a final robot heading.  Clearpath's default
+            # SimpleGoalChecker still requires yaw, so RPP can keep rotating
+            # after the Dingo has reached the selected point.  Use Nav2's
+            # official position-only checker and prevent that final rotation.
+            'controller_server.ros__parameters.general_goal_checker.plugin':
+                'nav2_controller::PositionGoalChecker',
+            'controller_server.ros__parameters.FollowPath.use_rotate_to_heading': 'false',
             'controller_server.ros__parameters.FollowPath.rotate_to_heading_angular_vel': '0.5',
             'controller_server.ros__parameters.FollowPath.max_angular_accel': '1.5',
             'controller_server.ros__parameters.FollowPath.allow_reversing': 'false',

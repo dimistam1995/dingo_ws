@@ -23,7 +23,10 @@ dd100_10000002:
         external:
           topic: 'cmd_vel'
           timeout: 0.5
-          priority: 1
+          # Higher than the Dashboard gate and below the physical E-stop /
+          # safety locks. This lets Nav2 pass while joystick commands remain
+          # masked during an autonomous goal.
+          priority: 253
       locks:
         e_stop:
           topic: 'platform/emergency_stop'
@@ -36,4 +39,6 @@ dd100_10000002:
         bt_quality:
           topic: 'joy_teleop/bt_quality_stop_gate'
           timeout: 0.5
-          priority: 253
+          # twist_mux masks velocity inputs at the same priority as a lock.
+          # Keep this below Nav2's external command (253).
+          priority: 252

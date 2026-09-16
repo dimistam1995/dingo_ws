@@ -99,6 +99,12 @@ def compact_json(value):
 
 
 class VoiceAssistantNode(Node):
+    # Keep free-form answers bounded, but large enough for a useful Greek
+    # explanation instead of the old one-line command acknowledgement.
+    LLM_REPLY_MAX_CHARS = 4000
+    # Keep the full answer in the Dashboard, but do not make Edge TTS wait for
+    # and read a long article before the user can continue speaking.
+    TTS_REPLY_MAX_CHARS = 600
     ALLOWED_INTENTS = {
         'stop',
         'status',
@@ -173,6 +179,7 @@ class VoiceAssistantNode(Node):
         'start_follow_me': 'follow_start',
         'stop_follow_me': 'follow_stop',
         'get_time': 'time',
+        'answer_general_question': 'answer',
     }
     POSITIVE_WORDS = {
         'ναι', 'ναι προχωρα', 'προχωρα', 'προχώρα', 'yes', 'ok', 'okay',
@@ -558,6 +565,21 @@ class VoiceAssistantNode(Node):
         self.llm_timeout_s = float(
             self.declare_parameter('llm_timeout_s', 35.0).value or 35.0
         )
+        try:
+            self.llm_max_output_tokens = max(
+                512,
+                min(
+                    2048,
+                    int(
+                        self.declare_parameter(
+                            'llm_max_output_tokens', 512
+                        ).value
+                        or 512
+                    ),
+                ),
+            )
+        except (TypeError, ValueError):
+            self.llm_max_output_tokens = 512
         self.rooms_file = Path(
             self.declare_parameter(
                 'rooms_file',
@@ -1279,7 +1301,7 @@ class VoiceAssistantNode(Node):
     def queue_tts(self, text):
         if not self.tts_enabled:
             return
-        text = ' '.join(str(text or '').split())[:500]
+        text = ' '.join(str(text or '').split())[:self.TTS_REPLY_MAX_CHARS]
         if not text:
             return
         if sd is None or np is None:
@@ -3238,6 +3260,59 @@ class VoiceAssistantNode(Node):
         ))
 
     @staticmethod
+    def is_dingo_information_query(normalized):
+        """Recognize broad Dingo questions before the intent model sees them.
+
+        A small model with native tools can otherwise interpret «πες μου για
+        το Dingo» as a request for the live robot status because ``get_status``
+        is more concrete than a free-form answer.  Explicit live questions
+        remain on the normal status/system-info path.
+        """
+        normalized = normalize_text(normalized)
+        subject = any(term in normalized for term in (
+            'dingo', 'dd100', 'clearpath', 'ρομποτ', 'ρομποτακι',
+        ))
+        information_request = any(term in normalized for term in (
+            'πες μου για', 'μιλησε μου για', 'πληροφορι', 'χαρακτηριστικ',
+            'στοιχει', 'τι ειναι', 'τα παντα', 'ολα για', 'all about',
+            'specs', 'features',
+        ))
+        live_request = any(term in normalized for term in (
+            'καταστασ', 'status', 'δουλευ', 'λειτουργ', 'ετοιμ',
+            'μπαταρ', 'θεσ', 'που βρισκ', 'nav2', 'συστημ',
+        ))
+        return subject and information_request and not live_request
+
+    @staticmethod
+    def is_general_question_query(normalized):
+        """Route ordinary knowledge questions through the short prompt path."""
+        normalized = normalize_text(normalized).strip()
+        if not normalized:
+            return False
+        question_start = normalized.startswith((
+            'τι ', 'ποια ', 'ποιος ', 'ποιο ', 'ποσο ', 'πως ', 'γιατι ',
+            'ποτε ', 'πες ', 'πεσ ', 'what ', 'who ', 'how ', 'why ',
+        ))
+        information_marker = any(term in normalized for term in (
+            'πληροφορι', 'εξηγησε', 'σημαινει', 'οριζεται', 'χαρακτηριστικ',
+        ))
+        if not (question_start or information_marker):
+            return False
+        # These are likely live robot/system requests and must keep the full
+        # intent router and its safety/tool validation.
+        control_marker = any(term in normalized for term in (
+            'σταμα', 'πηγαινε', 'παμε ', 'στειλε', 'μετακινη', 'οδηγη',
+            'καταστασ', 'status', 'δουλευ', 'λειτουργ', 'ετοιμ', 'μπαταρ',
+            'που βρισκ', 'που ειμαι', 'θεσ', 'τοποθεσ', 'nav2', 'πλοηγ',
+            'navigation', 'συστημ', 'service', 'καμερα', 'camera', 'vision',
+            'εικονα', 'αισθητ', 'sensor', 'lidar', 'λιδαρ', 'ram', 'cpu',
+            'δισκο', 'χωρο', 'μικροφων', 'περιπολ', 'στροφη', 'περιστροφ',
+            'μπροστα', 'πισω', 'δωματιο', 'follow', 'ακολουθ', 'ξεκι',
+            'κλεισε', 'ακυρ',
+        ))
+        return not control_marker
+
+    @staticmethod
     def is_detailed_vision_query(normalized):
         return any(phrase in normalized for phrase in (
             'περιγραψε',
@@ -3685,7 +3760,15 @@ class VoiceAssistantNode(Node):
             )
             return
 
-        if not self.submit_work('llm', self.ask_llm, command_text):
+        llm_function = (
+            self.ask_general_llm
+            if (
+                self.is_dingo_information_query(normalized)
+                or self.is_general_question_query(normalized)
+            )
+            else self.ask_llm
+        )
+        if not self.submit_work('llm', llm_function, command_text):
             self.publish_status('busy', 'Περίμενε να ολοκληρωθεί η προηγούμενη εντολή')
             self.publish_reply(
                 'Περίμενε να ολοκληρωθεί η προηγούμενη εντολή.',
@@ -3830,12 +3913,33 @@ class VoiceAssistantNode(Node):
             if isinstance(item, dict) and str(item.get('name', '')).strip()
         ][:100]
 
-    def llm_system_prompt(self, rooms):
-        return (
-            'Είσαι ο ασφαλής βοηθός/intent router για Clearpath Dingo. '
-            'Για εντολές συστήματος ή ρομπότ χρησιμοποίησε το κατάλληλο native tool '
-            'από αυτά που σου δίνονται. Για απλή γενική ερώτηση απάντησε σύντομα στα ελληνικά. '
-            'Αν ο provider δεν υποστηρίζει native tools, επέστρεψε μόνο JSON intent, χωρίς markdown. '
+    def llm_system_prompt(self, rooms, force_answer=False):
+        prompt = (
+            'Είσαι ο ασφαλής βοηθός και intent router για το Clearpath Dingo. '
+            'Για εντολές συστήματος ή ρομπότ χρησιμοποίησε μόνο το κατάλληλο '
+            'allow-listed native tool. Για γενικές/γνωστικές ερωτήσεις χρησιμοποίησε '
+            'answer_general_question ή intent=answer και δώσε αυτοτελή απάντηση '
+            'στα ελληνικά. Σε μια συνηθισμένη γενική ερώτηση απάντησε σύντομα '
+            'σε 2–4 προτάσεις. Όταν ζητούνται «όλες οι πληροφορίες», γράψε '
+            'τουλάχιστον 6–10 προτάσεις και κάλυψε ταυτότητα, μηχανικά στοιχεία, '
+            'αισθητήρες, λογισμικό, δυνατότητες και βασική ασφάλεια· χρησιμοποίησε '
+            'περίπου 700–1800 χαρακτήρες, με απλές παραγράφους ή bullets όταν βοηθούν. '
+            'Ο provider χωρίς native tools επιστρέφει μόνο JSON, χωρίς markdown έξω '
+            'από το πεδίο reply. '
+            'Πολύ σημαντική διάκριση: status/get_status σημαίνει μόνο τρέχουσα live '
+            'κατάσταση, π.χ. «τι κατάσταση είναι», «είναι έτοιμο», «δουλεύει το Nav2» '
+            'ή «status». Δεν χρησιμοποιείς status για «τι είναι το Dingo», '
+            '«πες μου για το Dingo», «χαρακτηριστικά» ή «όλες τις πληροφορίες». '
+            'Το system_info σημαίνει μόνο live μετρήσεις υπολογιστή/ρομπότ, όχι γενική '
+            'περιγραφή του Dingo. Μην παρουσιάζεις live κατάσταση ως σταθερό τεχνικό '
+            'χαρακτηριστικό και μην επινοείς μετρήσεις. '
+            'Επιβεβαιωμένα στοιχεία αναφοράς για γενική απάντηση: Clearpath Dingo-D '
+            'DD100, διαφορική κίνηση, διαστάσεις περίπου 551 × 517 × 110 mm, '
+            'απόσταση από το έδαφος 14 mm, μάζα 12 kg, μέγιστο ωφέλιμο φορτίο 20 kg '
+            'και μέγιστη ταχύτητα 1,3 m/s. Η εγκατάσταση χρησιμοποιεί ROS 2 Jazzy, '
+            'Nav2/AMCL για πλοήγηση και localization, SLAM για χαρτογράφηση, Hokuyo '
+            'UTM-30LX-EW LiDAR, Intel RealSense D455 και ReSpeaker XVF3800. '
+            'Για άλλα στοιχεία να είσαι σαφής όταν δεν είναι γνωστά. '
             'Intents: stop,status,battery,where,navigate_room,move_distance,system_info,system_control,patrol,rotate,vision,'
             'vision_question,face_query,speaker_query,follow_start,follow_stop,time,answer,unknown. '
             'Κανόνες: navigate_room=μόνο room από τη λίστα· system_info target=disk,memory,cpu,'
@@ -3847,17 +3951,42 @@ class VoiceAssistantNode(Node):
             'dingo-object-detector.service,dingo-face-recognition.service,dingo-mic-array.service. '
             'Ποτέ μην επινοείς service/path/command. Το system_control δεν είναι shell και δεν δέχεται '
             'ROS topics, αρχεία, συντεταγμένες, reboot ή shutdown. '
-            'move_distance έχει distance_m σε μέτρα '
-            '(θετικό μπροστά, αρνητικό πίσω) και θέλει επιβεβαίωση· '
-            'patrol/rotate/follow_start θέλουν επιβεβαίωση· '
-            'rotate έχει degrees 1-360 και direction left/right· vision_question έχει question· '
-            'answer είναι σύντομη γενική απάντηση στα ελληνικά· time για ώρα/ημερομηνία. '
-            'Για live intents μην επινοείς μετρήσεις. Όλα τα κείμενα σύντομα, '
-            'σωστά ελληνικά με τόνους. Ποτέ shell commands, ROS topics ή συντεταγμένες. '
+            'move_distance έχει distance_m σε μέτρα (θετικό μπροστά, αρνητικό πίσω) και θέλει επιβεβαίωση· '
+            'patrol/rotate/follow_start θέλουν επιβεβαίωση· rotate έχει degrees 1–360 και direction left/right· '
+            'vision_question έχει question· time για ώρα/ημερομηνία. '
+            'Όλα τα κείμενα να είναι σωστά ελληνικά με τόνους. Ποτέ shell commands, ROS topics ή συντεταγμένες. '
             'Schema: {"intent":"...","room":"","target":"","operation":"status",'
             '"service":"","map_name":"","reply":"","question":"",'
             '"degrees":360,"direction":"","rounds":1,"distance_m":1}. '
             f'Δωμάτια: {json.dumps(rooms, ensure_ascii=False)}'
+        )
+        if force_answer:
+            prompt += (
+                ' Η συγκεκριμένη ερώτηση έχει αναγνωριστεί από τον router ως γενική '
+                'ενημερωτική ερώτηση για το Dingo. Υποχρεωτικά απάντησε με '
+                'answer_general_question (native) ή με intent=answer (JSON fallback). '
+                'Μην καλέσεις get_status, get_location ή get_system_info και μην '
+                'επιστρέψεις Nav2 status ως απάντηση.'
+            )
+        return prompt
+
+    @staticmethod
+    def llm_fast_answer_prompt():
+        """Small prompt for questions that cannot become robot actions."""
+        return (
+            'Είσαι γρήγορος ελληνόφωνος βοηθός. Η ερώτηση είναι καθαρά '
+            'πληροφοριακή και δεν είναι εντολή προς το ρομπότ. Απάντησε άμεσα '
+            'και φυσικά στα ελληνικά, σε 1–3 προτάσεις. Αν ο χρήστης ζητά '
+            '«όλες τις πληροφορίες», «αναλυτικά» ή «πες μου τα πάντα», γράψε '
+            '6–10 προτάσεις. Μην αναφέρεις Nav2, live θέση ή system status '
+            'εκτός αν ζητηθούν ρητά και μην επινοείς live μετρήσεις. '
+            'Για το Clearpath Dingo-D DD100 γνωρίζεις: διαφορική κίνηση, '
+            '551 × 517 × 110 mm, διάκενο 14 mm, μάζα 12 kg, ωφέλιμο φορτίο '
+            '20 kg, μέγιστη ταχύτητα 1,3 m/s, ROS 2 Jazzy, Nav2/AMCL, SLAM, '
+            'Hokuyo UTM-30LX-EW LiDAR, Intel RealSense D455 και ReSpeaker XVF3800. '
+            'Επέστρεψε μόνο JSON της μορφής '
+            '{"intent":"answer","reply":"..."}. '
+            'Μην επιστρέψεις markdown έξω από το reply.'
         )
 
     def read_gemini_api_key(self):
@@ -4069,6 +4198,25 @@ class VoiceAssistantNode(Node):
                 'parameters': {'type': 'object', 'properties': {}},
             },
             {
+                'name': 'answer_general_question',
+                'description': (
+                    'Απάντησε αναλυτικά σε γενική πληροφοριακή ερώτηση για το Dingo '
+                    'ή άλλο θέμα, στα ελληνικά. Χρησιμοποίησε το reply για ολόκληρη '
+                    'την αυτοτελή απάντηση, με 6–10 προτάσεις όταν ζητούνται όλες '
+                    'οι πληροφορίες, και μην καλέσεις live status tools.'
+                ),
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'reply': {
+                            'type': 'string',
+                            'description': 'Αναλυτική, αυτοτελής απάντηση στα ελληνικά.',
+                        },
+                    },
+                    'required': ['reply'],
+                },
+            },
+            {
                 'name': 'get_time',
                 'description': 'Δώσε την τοπική ώρα και ημερομηνία του υπολογιστή.',
                 'parameters': {'type': 'object', 'properties': {}},
@@ -4155,6 +4303,13 @@ class VoiceAssistantNode(Node):
                     result['degrees'] = -360.0
         elif intent == 'vision_question':
             result['question'] = str(arguments.get('question', '') or '')
+        elif intent == 'answer':
+            result['reply'] = str(
+                arguments.get(
+                    'reply', arguments.get('answer', arguments.get('text', ''))
+                )
+                or ''
+            )
         return result
 
     @classmethod
@@ -4200,20 +4355,36 @@ class VoiceAssistantNode(Node):
         except RuntimeError:
             return {
                 'intent': 'answer',
-                'reply': content.strip()[:240],
+                'reply': content.strip()[:cls.LLM_REPLY_MAX_CHARS],
             }
         return parsed
 
-    def ask_llm(self, command_text):
+    def ask_general_llm(self, command_text):
+        """Ask the model for a free-form answer, never a live robot action."""
+        return self.ask_llm(
+            command_text,
+            force_answer=True,
+            fast_answer=True,
+        )
+
+    def ask_llm(self, command_text, force_answer=False, fast_answer=False):
         rooms = self.known_rooms()
-        system_prompt = self.llm_system_prompt(rooms)
+        system_prompt = (
+            self.llm_fast_answer_prompt()
+            if fast_answer
+            else self.llm_system_prompt(rooms, force_answer=force_answer)
+        )
         # Hold the configuration lock for the complete request.  A Dashboard
         # switch therefore waits for the current answer instead of mixing a
         # provider with another provider's URL/model halfway through a call.
         with self.llm_config_lock:
             if self.llm_provider == 'gemini':
                 try:
-                    return self.ask_gemini(command_text, system_prompt)
+                    return self.ask_gemini(
+                        command_text,
+                        system_prompt,
+                        answer_only=force_answer,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     # Gemini quota/rate-limit, API-key, network and transient
                     # cloud failures must not turn a valid Dingo command into
@@ -4235,10 +4406,22 @@ class VoiceAssistantNode(Node):
                         force=True,
                         log=False,
                     )
-                    return self.ask_flm(command_text, system_prompt)
+                    return self.ask_flm(
+                        command_text,
+                        system_prompt,
+                        answer_only=force_answer,
+                    )
             if self.llm_provider == 'flm':
-                return self.ask_flm(command_text, system_prompt)
-            return self.ask_ollama(command_text, system_prompt)
+                return self.ask_flm(
+                    command_text,
+                    system_prompt,
+                    answer_only=force_answer,
+                )
+            return self.ask_ollama(
+                command_text,
+                system_prompt,
+                answer_only=force_answer,
+            )
 
     def publish_gemini_usage(self, body, request_type='assistant', model=None):
         usage = body.get('usageMetadata') if isinstance(body, dict) else None
@@ -4276,7 +4459,7 @@ class VoiceAssistantNode(Node):
             String(data=json.dumps(payload, ensure_ascii=False))
         )
 
-    def ask_gemini(self, command_text, system_prompt):
+    def ask_gemini(self, command_text, system_prompt, answer_only=False):
         api_key = self.read_gemini_api_key()
         schema = {
             'type': 'object',
@@ -4309,13 +4492,19 @@ class VoiceAssistantNode(Node):
             }],
             'generationConfig': {
                 'temperature': 0,
-                'maxOutputTokens': 192,
+                'maxOutputTokens': self.llm_max_output_tokens,
                 'thinkingConfig': {'thinkingBudget': 0},
                 'responseMimeType': 'application/json',
                 'responseSchema': schema,
             },
         }
         if self.native_tool_calling:
+            function_declarations = self.gemini_tool_definitions()
+            if answer_only:
+                function_declarations = [
+                    item for item in function_declarations
+                    if item.get('name') == 'answer_general_question'
+                ]
             payload = {
                 'systemInstruction': {
                     'parts': [{'text': system_prompt}],
@@ -4325,14 +4514,14 @@ class VoiceAssistantNode(Node):
                     'parts': [{'text': command_text}],
                 }],
                 'tools': [{
-                    'functionDeclarations': self.gemini_tool_definitions(),
+                    'functionDeclarations': function_declarations,
                 }],
                 'toolConfig': {
                     'functionCallingConfig': {'mode': 'AUTO'},
                 },
                 'generationConfig': {
                     'temperature': 0,
-                    'maxOutputTokens': 192,
+                    'maxOutputTokens': self.llm_max_output_tokens,
                     'thinkingConfig': {'thinkingBudget': 0},
                 },
             }
@@ -4399,12 +4588,15 @@ class VoiceAssistantNode(Node):
         )
         return self.parse_model_content(content)
 
-    def ask_ollama(self, command_text, system_prompt):
+    def ask_ollama(self, command_text, system_prompt, answer_only=False):
         legacy_payload = {
             'model': self.llm_model,
             'stream': False,
             'format': 'json',
-            'options': {'temperature': 0},
+            'options': {
+                'temperature': 0,
+                'num_predict': self.llm_max_output_tokens,
+            },
             'messages': [
                 {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': command_text},
@@ -4412,11 +4604,19 @@ class VoiceAssistantNode(Node):
         }
         payload = legacy_payload
         if self.native_tool_calling:
+            tool_definitions = self.openai_tool_definitions()
+            if answer_only:
+                tool_definitions = [
+                    item for item in tool_definitions
+                    if (item.get('function') or {}).get('name')
+                    == 'answer_general_question'
+                ]
             payload = {
                 'model': self.llm_model,
                 'stream': False,
                 'messages': legacy_payload['messages'],
-                'tools': self.openai_tool_definitions(),
+                'options': legacy_payload['options'],
+                'tools': tool_definitions,
             }
 
         def post(request_payload):
@@ -4462,7 +4662,7 @@ class VoiceAssistantNode(Node):
         content = message.get('content', '') if isinstance(message, dict) else ''
         return self.parse_model_content(content)
 
-    def ask_flm(self, command_text, system_prompt):
+    def ask_flm(self, command_text, system_prompt, answer_only=False):
         """Ask the local FastFlowLM OpenAI-compatible endpoint."""
         legacy_payload = {
             'model': self.llm_model,
@@ -4472,12 +4672,19 @@ class VoiceAssistantNode(Node):
             ],
             'stream': False,
             'temperature': 0,
-            'max_tokens': 384,
+            'max_tokens': self.llm_max_output_tokens,
         }
         payload = legacy_payload
         if self.native_tool_calling:
             payload = dict(legacy_payload)
-            payload['tools'] = self.openai_tool_definitions()
+            tool_definitions = self.openai_tool_definitions()
+            if answer_only:
+                tool_definitions = [
+                    item for item in tool_definitions
+                    if (item.get('function') or {}).get('name')
+                    == 'answer_general_question'
+                ]
+            payload['tools'] = tool_definitions
 
         def post(request_payload):
             request = Request(
@@ -4556,7 +4763,7 @@ class VoiceAssistantNode(Node):
         operation = normalize_text(value.get('operation', '')).strip()[:32]
         service = str(value.get('service', '') or '').strip()[:80]
         map_name = str(value.get('map_name', '') or '').strip()[:60]
-        reply = str(value.get('reply', '') or '').strip()[:240]
+        reply = str(value.get('reply', '') or '').strip()[:self.LLM_REPLY_MAX_CHARS]
         question = str(value.get('question', '') or '').strip()[:500]
         try:
             degrees = float(value.get('degrees'))
